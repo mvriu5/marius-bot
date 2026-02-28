@@ -11,6 +11,7 @@ if (!telegramBotUsername) throw new Error("Missing TELEGRAM_BOT_USERNAME")
 if (!redisUrl) throw new Error("Missing REDIS_URL")
 
 export const bot = new Chat({
+    logger: "info",
     userName: telegramBotUsername,
     state: createRedisState({ url: redisUrl }),
     adapters: {
@@ -24,7 +25,11 @@ export const bot = new Chat({
 })
 
 bot.onNewMention(async (thread, message) => {
-    await thread.post(`You said: ${message.text}`)
+    try {
+        await thread.post(`You said: ${message.text}`)
+    } catch (error) {
+        console.error("Error handling message:", error)
+    }
 })
 
 bot.onNewMessage(/^!help/i, async (thread, message) => {
