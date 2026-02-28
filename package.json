@@ -1,0 +1,15 @@
+{
+  "name": "hono",
+  "type": "module",
+  "dependencies": {
+    "@chat-adapter/state-redis": "^4.15.0",
+    "@chat-adapter/telegram": "^4.15.0",
+    "chat": "^4.15.0",
+    "hono": "^4.12.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "tsx": "^4.7.1",
+    "typescript": "^5.8.3"
+  }
+}
