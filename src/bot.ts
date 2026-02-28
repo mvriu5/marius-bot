@@ -25,21 +25,18 @@ export const bot = new Chat({
 })
 
 
-bot.onNewMessage(/^!fitbit/, async (thread, message) => {
-    console.log("onNewMessage fired", { command: message, threadId: thread.id })
-    await thread.post(`You invoked the /fitbit command`)
-    console.log("onNewMessage post sent", { threadId: thread.id })
-})
-
 bot.onNewMention(async (thread, message) => {
     console.log("onNewMention fired", { text: message.text, threadId: thread.id })
+    await thread.subscribe()
     await thread.post(`You said: ${message.text}`)
     console.log("onNewMention post sent", { threadId: thread.id })
 })
 
 bot.onSubscribedMessage(async (thread, message) => {
     console.log("onSubscribedMessage fired", { text: message.text, threadId: thread.id })
-    if (message.text.startsWith("/")) return
+    if (message.text.startsWith("/fitbit")) {
+        thread.post("You mentioned Fitbit! Here's some info about it: Fitbit is a brand of fitness trackers and smartwatches that help you monitor your health and activity levels. You can track your steps, heart rate, sleep, and more with a Fitbit device.")
+    }
     await thread.post(`SUB: You said: ${message.text}`)
     console.log("onSubscribedMessage post sent", { threadId: thread.id })
 })
