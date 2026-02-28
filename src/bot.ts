@@ -26,12 +26,17 @@ export const bot = new Chat({
 
 bot.onNewMention(async (thread, message) => {
     try {
+        await thread.subscribe()
         await thread.post(`You said: ${message.text}`)
     } catch (error) {
-        console.error("Error handling message:", error)
+        console.log("Error handling message:", error)
     }
 })
 
-bot.onNewMessage(/^!help/i, async (thread, message) => {
-    await thread.post("Available commands: !help, !status")
+bot.onNewMessage(/[\s\S]*/, async (thread, message) => {
+    try {
+        await thread.post(`Du hast gesagt: ${message.text}`);
+    } catch (error) {
+        console.log("Error handling message:", error)
+    }
 })
