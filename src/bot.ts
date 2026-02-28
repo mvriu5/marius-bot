@@ -35,3 +35,9 @@ bot.onSubscribedMessage(async (thread, message) => {
     await thread.post(`SUB: You said: ${message.text}`)
     console.log("onSubscribedMessage post sent", { threadId: thread.id })
 })
+
+bot.onSlashCommand("fitbit", async (event) => {
+    console.log("onSlashCommand fired", { command: event.command, threadId: event.channel.id })
+    await event.channel.post(`You invoked the /fitbit command with args:`)
+    console.log("onSlashCommand post sent", { threadId: event.channel.id })
+})
