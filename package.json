@@ -1,6 +1,9 @@
 {
   "name": "hono",
   "type": "module",
+  "scripts": {
+    "start": "vercel dev"
+  },
   "dependencies": {
     "@chat-adapter/state-redis": "^4.15.0",
     "@chat-adapter/telegram": "^4.15.0",
