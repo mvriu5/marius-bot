@@ -1,8 +1,9 @@
 import { Message, Thread } from "chat"
-import { FitbitAuthorizationRequiredError, getFitbitDailySummaryMessage } from "./lib/fitbit.js"
-import { rememberBriefingTarget } from "./briefing.js"
+import { FitbitAuthorizationRequiredError, getFitbitDailySummaryMessage } from "../lib/fitbit.js"
+import { getNewsSummaryMessage } from "../lib/news.js"
+import { getWeatherSummaryMessage } from "../lib/weather.js"
 
-export const COMMAND_NAMES = ["fitbit", "help"] as const
+export const COMMAND_NAMES = ["fitbit", "weather", "news", "help"] as const
 
 export type CommandName = typeof COMMAND_NAMES[number]
 
@@ -26,7 +27,6 @@ export const commands: Command[] = [
                 `Verfügbare Befehle:\n` +
                 COMMAND_NAMES.map((cmd) => `/${cmd}`).join("\n")
             )
-            await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
         }
     },
     {
@@ -43,6 +43,30 @@ export const commands: Command[] = [
 
                 const details = error instanceof Error ? error.message : String(error)
                 await ctx.thread.post(`Fitbit konnte nicht geladen werden: ${details}`)
+            }
+        }
+    },
+    {
+        name: "weather",
+        execute: async (ctx) => {
+            try {
+                const summary = await getWeatherSummaryMessage()
+                await ctx.thread.post(summary)
+            } catch (error) {
+                const details = error instanceof Error ? error.message : String(error)
+                await ctx.thread.post(`Wetter konnte nicht geladen werden: ${details}`)
+            }
+        }
+    },
+    {
+        name: "news",
+        execute: async (ctx) => {
+            try {
+                const summary = await getNewsSummaryMessage()
+                await ctx.thread.post(summary)
+            } catch (error) {
+                const details = error instanceof Error ? error.message : String(error)
+                await ctx.thread.post(`News konnten nicht geladen werden: ${details}`)
             }
         }
     }

@@ -2,6 +2,7 @@ import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
 import { COMMAND_NAMES, CommandContext, getCommand } from "./command.js"
 import { state } from "./state.js"
+import { rememberBriefingTarget } from "../lib/briefing.js"
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN
 const telegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
@@ -41,6 +42,7 @@ bot.onSubscribedMessage(async (thread, message) => {
         args: message.text.trim().split(/\s+/).slice(1)
     }
 
+    await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
     const cmd = getCommand(ctx.command as CommandContext["command"])
     await cmd?.execute(ctx)
 })

@@ -1,16 +1,12 @@
 import { Message, Thread } from "chat"
-import { getCommand, type CommandContext, type CommandName, COMMAND_NAMES } from "./command.js"
-import { ensureStateConnected, state } from "./state.js"
+import { getCommand, type CommandContext, type CommandName, COMMAND_NAMES } from "../server/command.js"
+import { ensureStateConnected, state } from "../server/state.js"
+import { bot } from "../server/bot.js"
 
 const BRIEFING_TARGETS_KEY = "briefing:targets"
 
 type BriefingTargets = Record<string, string>
 
-type BotWithAdapter = {
-    getAdapter: (name: "telegram") => {
-        postMessage: (threadId: string, message: string) => Promise<unknown>
-    }
-}
 
 export async function rememberBriefingTarget(telegramUserId: string, threadId: string) {
     await ensureStateConnected()
@@ -21,17 +17,12 @@ export async function rememberBriefingTarget(telegramUserId: string, threadId: s
     await state.set(BRIEFING_TARGETS_KEY, targets)
 }
 
-function getBriefingCommandNames() {
-    return COMMAND_NAMES.filter((name): name is CommandName => name !== "help")
-}
-
-export async function runDailyBriefing(bot: BotWithAdapter) {
+export async function runDailyBriefing() {
     await ensureStateConnected()
 
     const targets = (await state.get<BriefingTargets>(BRIEFING_TARGETS_KEY)) ?? {}
-    const adapter = bot.getAdapter("telegram")
+    const commands = COMMAND_NAMES.filter((name): name is CommandName => name !== "help")
 
-    const commands = getBriefingCommandNames()
     let recipients = 0
     let executed = 0
 
@@ -41,7 +32,7 @@ export async function runDailyBriefing(bot: BotWithAdapter) {
         const thread = {
             id: threadId,
             post: async (text: string) => {
-                await adapter.postMessage(threadId, text)
+                await bot.getAdapter("telegram").postMessage(threadId, text)
             }
         } as unknown as Thread<Record<string, unknown>, unknown>
 
@@ -50,7 +41,7 @@ export async function runDailyBriefing(bot: BotWithAdapter) {
             if (!command) continue
 
             const message = {
-                text: `/${commandName}`,
+                text: `---${commandName}---`,
                 author: { userId: telegramUserId }
             } as unknown as Message<unknown>
 
