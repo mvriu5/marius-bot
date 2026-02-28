@@ -13,7 +13,18 @@ app.post("/api/webhooks/telegram", async (c) => {
         return c.text("Telegram adapter not configured", 404)
     }
 
-    return handler(c.req.raw)
+    const backgroundTasks: Promise<unknown>[] = []
+    const response = await handler(c.req.raw, {
+        waitUntil: (task) => {
+            backgroundTasks.push(task)
+        }
+    })
+
+    if (backgroundTasks.length > 0) {
+        await Promise.allSettled(backgroundTasks)
+    }
+
+    return response
 })
 
 
