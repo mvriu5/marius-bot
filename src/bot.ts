@@ -25,20 +25,9 @@ export const bot = new Chat({
 })
 
 bot.onNewMention(async (thread, message) => {
-    try {
-        console.log("got message:", message.text);
-        await thread.subscribe()
-        await thread.post(`You said: ${message.text}`)
-    } catch (error) {
-        console.log("Error handling message:", error)
-    }
+    await thread.post(`You said: ${message.text}`)
 })
 
-bot.onNewMessage(/[\s\S]*/, async (thread, message) => {
-    try {
-        console.log("got message:", message.text);
-        await thread.post(`Du hast gesagt: ${message.text}`);
-    } catch (error) {
-        console.log("Error handling message:", error)
-    }
+bot.onSlashCommand("/fitbit", async (event) => {
+    await event.channel.post("")
 })

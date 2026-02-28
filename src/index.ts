@@ -13,8 +13,9 @@ app.post("/api/webhooks/telegram", async (c) => {
             return c.text("Telegram adapter not configured", 404)
         }
         return handler(c.req.raw, {
-            waitUntil: (task) => waitUntil(task)
-        });
+            waitUntil: (task) =>
+                waitUntil(task.catch((e) => console.error("[telegram] bg task error", e)))
+        })
     } catch (error) {
         console.error("[telegram-webhook] handler error", error)
         return c.text("ERR", 500)
