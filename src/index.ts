@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { bot } from "./bot.js"
 
-const app = new Hono().basePath('/api')
+const app = new Hono()
 
 app.get("/", (c) => c.text("Bot is running"))
 
