@@ -3,6 +3,8 @@ import { bot } from "./bot.js"
 
 const app = new Hono()
 
+app.get("/", (c) => c.text("Bot is running"))
+
 app.post("/api/webhooks/telegram", async (c) => {
     const handler = bot.webhooks.telegram
     if (!handler) {
