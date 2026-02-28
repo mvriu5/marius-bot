@@ -10,9 +10,8 @@ app.post("/api/webhooks/telegram", async (c) => {
     if (!handler) {
         return c.text("Telegram adapter not configured", 404)
     }
-    return handler(c.req.raw, {
-        waitUntil: (task) => Promise.resolve(task).catch(console.error)
-    })
+    // Process in-request to reduce concurrent handling of the same Telegram thread.
+    return handler(c.req.raw)
 })
 
 
