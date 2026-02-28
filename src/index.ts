@@ -13,9 +13,7 @@ app.post("/api/webhooks/telegram", async (c) => {
         return c.text("Telegram adapter not configured", 404)
     }
 
-    return handler(c.req.raw, {
-        waitUntil: (task) => c.executionCtx.waitUntil(task)
-    })
+    return handler(c.req.raw)
 })
 
 
