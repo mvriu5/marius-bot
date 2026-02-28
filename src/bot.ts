@@ -1,6 +1,6 @@
-import { Chat } from "chat"
 import { createTelegramAdapter } from "@chat-adapter/telegram"
-import { FitbitAuthorizationRequiredError, getFitbitDailySummaryMessage } from "./fitbit.js"
+import { Chat } from "chat"
+import { COMMAND_NAMES, CommandContext, getCommand } from "./command.js"
 import { state } from "./state.js"
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN
@@ -24,24 +24,23 @@ export const bot = new Chat({
 
 bot.onNewMention(async (thread, message) => {
     await thread.subscribe()
-    await thread.post(`You said: ${message.text}`)
+    await thread.post("Subscribed to thread for commands. Mention me with a command. /help for more info.")
 })
 
 bot.onSubscribedMessage(async (thread, message) => {
-    if (message.text.startsWith("/fitbit")) {
-        try {
-            const summary = await getFitbitDailySummaryMessage(message.author.userId)
-            await thread.post(summary)
-        } catch (error) {
-            if (error instanceof FitbitAuthorizationRequiredError) {
-                await thread.post(
-                    `Bitte verbinde zuerst Fitbit: ${error.authorizationUrl}`
-                )
-                return
-            }
+    const commandToken = message.text.trim().split(/\s+/)[0].toLowerCase()
+    if (!commandToken.startsWith("/")) return
 
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Fitbit konnte nicht geladen werden: ${details}`)
-        }
+    const command = commandToken.replace(/^\/+/, "")
+    if (!COMMAND_NAMES.includes(command as CommandContext["command"])) return
+
+    const ctx: CommandContext = {
+        thread,
+        message,
+        command: command as CommandContext["command"],
+        args: message.text.trim().split(/\s+/).slice(1)
     }
+
+    const cmd = getCommand(ctx.command as CommandContext["command"])
+    await cmd?.execute(ctx)
 })

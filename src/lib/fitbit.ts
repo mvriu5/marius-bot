@@ -1,4 +1,4 @@
-import { ensureStateConnected, state } from "./state.js"
+import { ensureStateConnected, state } from "../state.js"
 
 type FitbitSleepResponse = {
     sleep?: Array<{
@@ -20,24 +20,6 @@ type FitbitHrvResponse = {
     }>
 }
 
-type FitbitBreathingRateResponse = {
-    br?: Array<{
-        value?: {
-            breathingRate?: number
-        }
-    }>
-}
-
-type FitbitSpo2Response = {
-    spo2?: Array<{
-        value?: {
-            avg?: number
-            min?: number
-            max?: number
-        }
-    }>
-}
-
 type FitbitHeartIntradayResponse = {
     ["activities-heart-intraday"]?: {
         dataset?: Array<{ value: number }>
@@ -55,7 +37,6 @@ type FitbitTokenResponse = {
 
 const fitbitClientId = process.env.FITBIT_CLIENT_ID
 const fitbitClientSecret = process.env.FITBIT_CLIENT_SECRET
-const fitbitUserId = process.env.FITBIT_USER_ID
 const honoUrl = process.env.HONO_URL
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
@@ -151,7 +132,7 @@ export async function createFitbitAuthorizationUrl(telegramUserId: string) {
     )
 
     const redirectUri = getFitbitRedirectUri()
-    const scope = "heartrate sleep profile respiratory_rate oxygen_saturation"
+    const scope = "heartrate sleep profile"
 
     return `https://www.fitbit.com/oauth2/authorize?${new URLSearchParams({
         response_type: "code",
@@ -252,66 +233,39 @@ async function fetchFitbitJson<T>(accessToken: string, path: string): Promise<T>
 
 export async function getFitbitDailySummaryMessage(telegramUserId: string) {
     const validToken = await getValidAccessTokenForUser(telegramUserId)
-    const userIdForApi = fitbitUserId ?? validToken.fitbitUserId ?? "-"
+    const userIdForApi = validToken.fitbitUserId
     const date = getTodayDateString()
-    const failures: string[] = []
 
     const requests = {
         sleep: fetchFitbitJson<FitbitSleepResponse>(validToken.accessToken, `/1.2/user/${userIdForApi}/sleep/date/${date}.json`),
         hrv: fetchFitbitJson<FitbitHrvResponse>(validToken.accessToken, `/1/user/${userIdForApi}/hrv/date/${date}.json`),
-        breathingRate: fetchFitbitJson<FitbitBreathingRateResponse>(validToken.accessToken, `/1/user/${userIdForApi}/br/date/${date}.json`),
-        spo2: fetchFitbitJson<FitbitSpo2Response>(validToken.accessToken, `/1/user/${userIdForApi}/spo2/date/${date}.json`),
         heartIntraday: fetchFitbitJson<FitbitHeartIntradayResponse>(validToken.accessToken, `/1/user/${userIdForApi}/activities/heart/date/${date}/${date}/1min.json`)
     } as const
 
-    const [sleepResult, hrvResult, breathingRateResult, spo2Result, heartIntradayResult] = await Promise.allSettled([
+    const [sleepResult, hrvResult, heartIntradayResult] = await Promise.allSettled([
         requests.sleep,
         requests.hrv,
-        requests.breathingRate,
-        requests.spo2,
         requests.heartIntraday
     ])
 
     const sleep = sleepResult.status === "fulfilled" ? sleepResult.value : {}
-    if (sleepResult.status === "rejected") failures.push(`sleep: ${String(sleepResult.reason)}`)
-
     const hrv = hrvResult.status === "fulfilled" ? hrvResult.value : {}
-    if (hrvResult.status === "rejected") failures.push(`hrv: ${String(hrvResult.reason)}`)
-
-    const breathingRate = breathingRateResult.status === "fulfilled" ? breathingRateResult.value : {}
-    if (breathingRateResult.status === "rejected") failures.push(`br: ${String(breathingRateResult.reason)}`)
-
-    const spo2 = spo2Result.status === "fulfilled" ? spo2Result.value : {}
-    if (spo2Result.status === "rejected") failures.push(`spo2: ${String(spo2Result.reason)}`)
-
     const heartIntraday = heartIntradayResult.status === "fulfilled" ? heartIntradayResult.value : {}
-    if (heartIntradayResult.status === "rejected") failures.push(`heart_intraday: ${String(heartIntradayResult.reason)}`)
 
     const sleepSummary = sleep.summary ?? {}
     const mainSleep = sleep.sleep?.find((entry) => entry.isMainSleep) ?? sleep.sleep?.[0]
     const sleepScore = mainSleep?.efficiency ?? null
     const hrvValue = hrv.hrv?.[0]?.value
-    const breathingRateValue = breathingRate.br?.[0]?.value?.breathingRate ?? null
-    const spo2Value = spo2.spo2?.[0]?.value
     const heartRates = heartIntraday["activities-heart-intraday"]?.dataset?.map((entry) => entry.value) ?? []
     const lowestHeartRate = heartRates.length > 0 ? Math.min(...heartRates) : null
 
     const lines = [
-        "Fitbit Tagesuebersicht:",
+        "Fitbit Tages+bersicht:",
         `- Sleep Score: ${sleepScore ?? "n/a"}`,
         `- Schlaf: ${formatMinutes(sleepSummary.totalMinutesAsleep)} (im Bett: ${formatMinutes(sleepSummary.totalTimeInBed)})`,
         `- HRV (daily RMSSD): ${hrvValue?.dailyRmssd ?? "n/a"} ms`,
         `- HRV (deep RMSSD): ${hrvValue?.deepRmssd ?? "n/a"} ms`,
-        `- Atemfrequenz: ${breathingRateValue ?? "n/a"} /min`,
-        `- SpO2 avg/min/max: ${spo2Value?.avg ?? "n/a"} / ${spo2Value?.min ?? "n/a"} / ${spo2Value?.max ?? "n/a"} %`,
         `- Tiefste Herzfrequenz: ${lowestHeartRate ?? "n/a"} bpm`
     ]
-
-    if (failures.length > 0) {
-        lines.push("")
-        lines.push("Fehlerhafte Fitbit Calls:")
-        lines.push(...failures.map((failure) => `- ${failure}`))
-    }
-
     return lines.join("\n")
 }

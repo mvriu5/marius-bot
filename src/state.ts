@@ -1,7 +1,6 @@
 import { createRedisState } from "@chat-adapter/state-redis"
 
 const redisUrl = process.env.REDIS_URL
-
 if (!redisUrl) throw new Error("Missing REDIS_URL")
 
 export const state = createRedisState({ url: redisUrl })

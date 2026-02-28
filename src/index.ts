@@ -1,10 +1,29 @@
 import { Hono } from 'hono'
 import { bot } from "./bot.js"
-import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./fitbit.js"
+import { runDailyBriefing } from "./briefing.js"
+import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./lib/fitbit.js"
 
 const app = new Hono()
 
 app.get("/", (c) => c.text("Bot is running"))
+
+app.get("/api/jobs/daily-briefing", async (c) => {
+    const cronSecret = process.env.CRON_SECRET
+    if (!cronSecret) return c.text("Missing CRON_SECRET", 500)
+
+    const authHeader = c.req.header("authorization")
+    const querySecret = c.req.query("key")
+    const isAuthorized = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret
+    if (!isAuthorized) return c.text("Unauthorized", 401)
+
+    try {
+        const result = await runDailyBriefing(bot)
+        return c.json({ ok: true, ...result }, 200)
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error)
+        return c.json({ ok: false, error: details }, 500)
+    }
+})
 
 app.get("/api/fitbit/connect", async (c) => {
     const telegramUserId = c.req.query("telegram_user_id")
@@ -34,11 +53,8 @@ app.get("/api/fitbit/callback", async (c) => {
     }
 
     try {
-        const result = await handleFitbitOAuthCallback(code, state)
-        return c.text(
-            `Fitbit verbunden fuer Telegram User ${result.telegramUserId}. Du kannst jetzt im Chat /fitbit senden.`,
-            200
-        )
+        await handleFitbitOAuthCallback(code, state)
+        return c.text("OK", 200)
     } catch (err) {
         const details = err instanceof Error ? err.message : String(err)
         return c.text(`Fitbit callback failed: ${details}`, 500)
@@ -46,7 +62,6 @@ app.get("/api/fitbit/callback", async (c) => {
 })
 
 app.post("/api/webhooks/telegram", async (c) => {
-    console.log("WEBHOOK HIT")
     const handler = bot.webhooks.telegram
 
     if (!handler) {
@@ -59,7 +74,6 @@ app.post("/api/webhooks/telegram", async (c) => {
             backgroundTasks.push(task)
         }
     })
-    console.log("WEBHOOK HANDLER STATUS", response.status)
 
     if (backgroundTasks.length > 0) {
         const results = await Promise.allSettled(backgroundTasks)
