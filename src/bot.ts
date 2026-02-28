@@ -32,6 +32,7 @@ bot.onNewMention(async (thread, message) => {
 
 bot.onSubscribedMessage(async (thread, message) => {
     console.log("onSubscribedMessage fired", { text: message.text, threadId: thread.id })
+    if (message.text.startsWith("/")) return
     await thread.post(`SUB: You said: ${message.text}`)
     console.log("onSubscribedMessage post sent", { threadId: thread.id })
 })
