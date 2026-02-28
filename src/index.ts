@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { waitUntil } from "@vercel/functions"
 import { bot } from "./bot.js"
 
 const app = new Hono()
@@ -10,8 +11,7 @@ app.post("/api/webhooks/telegram", async (c) => {
     if (!handler) {
         return c.text("Telegram adapter not configured", 404)
     }
-    // Process in-request to reduce concurrent handling of the same Telegram thread.
-    return handler(c.req.raw)
+    return handler(c.req.raw, { waitUntil })
 })
 
 
