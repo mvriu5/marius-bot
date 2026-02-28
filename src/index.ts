@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { waitUntil } from "@vercel/functions"
 import { bot } from "./bot.js"
 
 const app = new Hono()
@@ -11,7 +10,9 @@ app.post("/api/webhooks/telegram", async (c) => {
     if (!handler) {
         return c.text("Telegram adapter not configured", 404)
     }
-    return handler(c.req.raw, { waitUntil })
+    return handler(c.req.raw, {
+        waitUntil: (task) => (c as any).executionCtx?.waitUntil?.(task) ?? task.catch(console.error)
+    })
 })
 
 
