@@ -1,21 +1,46 @@
 import { ensureStateConnected, state } from "./state.js"
 
-type FitbitActivitiesResponse = {
-    summary?: {
-        steps?: number
-        caloriesOut?: number
-        distances?: Array<{ activity: string; distance: number }>
-        lightlyActiveMinutes?: number
-        fairlyActiveMinutes?: number
-        veryActiveMinutes?: number
-        restingHeartRate?: number
-    }
-}
-
 type FitbitSleepResponse = {
+    sleep?: Array<{
+        isMainSleep?: boolean
+        efficiency?: number
+    }>
     summary?: {
         totalMinutesAsleep?: number
         totalTimeInBed?: number
+    }
+}
+
+type FitbitHrvResponse = {
+    hrv?: Array<{
+        value?: {
+            dailyRmssd?: number
+            deepRmssd?: number
+        }
+    }>
+}
+
+type FitbitBreathingRateResponse = {
+    br?: Array<{
+        value?: {
+            breathingRate?: number
+        }
+    }>
+}
+
+type FitbitSpo2Response = {
+    spo2?: Array<{
+        value?: {
+            avg?: number
+            min?: number
+            max?: number
+        }
+    }>
+}
+
+type FitbitHeartIntradayResponse = {
+    ["activities-heart-intraday"]?: {
+        dataset?: Array<{ value: number }>
     }
 }
 
@@ -126,7 +151,7 @@ export async function createFitbitAuthorizationUrl(telegramUserId: string) {
     )
 
     const redirectUri = getFitbitRedirectUri()
-    const scope = "activity heartrate sleep profile"
+    const scope = "heartrate sleep profile respiratory_rate oxygen_saturation"
 
     return `https://www.fitbit.com/oauth2/authorize?${new URLSearchParams({
         response_type: "code",
@@ -230,26 +255,31 @@ export async function getFitbitDailySummaryMessage(telegramUserId: string) {
     const userIdForApi = fitbitUserId ?? validToken.fitbitUserId ?? "-"
     const date = getTodayDateString()
 
-    const [activities, sleep] = await Promise.all([
-        fetchFitbitJson<FitbitActivitiesResponse>(validToken.accessToken, `/1/user/${userIdForApi}/activities/date/${date}.json`),
-        fetchFitbitJson<FitbitSleepResponse>(validToken.accessToken, `/1/user/${userIdForApi}/sleep/date/${date}.json`)
+    const [sleep, hrv, breathingRate, spo2, heartIntraday] = await Promise.all([
+        fetchFitbitJson<FitbitSleepResponse>(validToken.accessToken, `/1.2/user/${userIdForApi}/sleep/date/${date}.json`),
+        fetchFitbitJson<FitbitHrvResponse>(validToken.accessToken, `/1/user/${userIdForApi}/hrv/date/${date}.json`),
+        fetchFitbitJson<FitbitBreathingRateResponse>(validToken.accessToken, `/1/user/${userIdForApi}/br/date/${date}.json`),
+        fetchFitbitJson<FitbitSpo2Response>(validToken.accessToken, `/1/user/${userIdForApi}/spo2/date/${date}.json`),
+        fetchFitbitJson<FitbitHeartIntradayResponse>(validToken.accessToken, `/1/user/${userIdForApi}/activities/heart/date/${date}/${date}/1min.json`)
     ])
 
-    const activitySummary = activities.summary ?? {}
     const sleepSummary = sleep.summary ?? {}
-    const totalDistance = activitySummary.distances?.find((entry) => entry.activity === "total")?.distance ?? 0
-    const activeMinutes =
-        (activitySummary.lightlyActiveMinutes ?? 0) +
-        (activitySummary.fairlyActiveMinutes ?? 0) +
-        (activitySummary.veryActiveMinutes ?? 0)
+    const mainSleep = sleep.sleep?.find((entry) => entry.isMainSleep) ?? sleep.sleep?.[0]
+    const sleepScore = mainSleep?.efficiency ?? null
+    const hrvValue = hrv.hrv?.[0]?.value
+    const breathingRateValue = breathingRate.br?.[0]?.value?.breathingRate ?? null
+    const spo2Value = spo2.spo2?.[0]?.value
+    const heartRates = heartIntraday["activities-heart-intraday"]?.dataset?.map((entry) => entry.value) ?? []
+    const lowestHeartRate = heartRates.length > 0 ? Math.min(...heartRates) : null
 
     return [
         "Fitbit Tagesuebersicht:",
-        `- Schritte: ${activitySummary.steps ?? 0}`,
-        `- Distanz: ${totalDistance.toFixed(2)} km`,
-        `- Kalorien: ${activitySummary.caloriesOut ?? 0} kcal`,
-        `- Aktive Minuten: ${activeMinutes}`,
-        `- Ruhepuls: ${activitySummary.restingHeartRate ?? "n/a"} bpm`,
-        `- Schlaf: ${formatMinutes(sleepSummary.totalMinutesAsleep)} (im Bett: ${formatMinutes(sleepSummary.totalTimeInBed)})`
+        `- Sleep Score: ${sleepScore ?? "n/a"}`,
+        `- Schlaf: ${formatMinutes(sleepSummary.totalMinutesAsleep)} (im Bett: ${formatMinutes(sleepSummary.totalTimeInBed)})`,
+        `- HRV (daily RMSSD): ${hrvValue?.dailyRmssd ?? "n/a"} ms`,
+        `- HRV (deep RMSSD): ${hrvValue?.deepRmssd ?? "n/a"} ms`,
+        `- Atemfrequenz: ${breathingRateValue ?? "n/a"} /min`,
+        `- SpO2 avg/min/max: ${spo2Value?.avg ?? "n/a"} / ${spo2Value?.min ?? "n/a"} / ${spo2Value?.max ?? "n/a"} %`,
+        `- Tiefste Herzfrequenz: ${lowestHeartRate ?? "n/a"} bpm`
     ].join("\n")
 }
