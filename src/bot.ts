@@ -18,3 +18,7 @@ export const bot = new Chat({
 bot.onNewMention(async (thread, message) => {
     await thread.post(`You said: ${message.text}`)
 })
+
+bot.onNewMessage(/^!help/i, async (thread, message) => {
+    await thread.post("Available commands: !help, !status")
+})
