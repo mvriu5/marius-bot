@@ -96,6 +96,10 @@ function formatMinutes(totalMinutes: number | undefined) {
     return `${hours}h ${minutes}m`
 }
 
+function getTodayDateString() {
+    return new Date().toISOString().slice(0, 10)
+}
+
 async function saveToken(telegramUserId: string, tokenData: FitbitTokenResponse) {
     await ensureStateConnected()
     await state.set<StoredFitbitToken>(tokenKey(telegramUserId), {
@@ -224,10 +228,11 @@ async function fetchFitbitJson<T>(accessToken: string, path: string): Promise<T>
 export async function getFitbitDailySummaryMessage(telegramUserId: string) {
     const validToken = await getValidAccessTokenForUser(telegramUserId)
     const userIdForApi = fitbitUserId ?? validToken.fitbitUserId ?? "-"
+    const date = getTodayDateString()
 
     const [activities, sleep] = await Promise.all([
-        fetchFitbitJson<FitbitActivitiesResponse>(validToken.accessToken, `/1/user/${userIdForApi}/activities/date/today.json`),
-        fetchFitbitJson<FitbitSleepResponse>(validToken.accessToken, `/1/user/${userIdForApi}/sleep/date/today.json`)
+        fetchFitbitJson<FitbitActivitiesResponse>(validToken.accessToken, `/1/user/${userIdForApi}/activities/date/${date}.json`),
+        fetchFitbitJson<FitbitSleepResponse>(validToken.accessToken, `/1/user/${userIdForApi}/sleep/date/${date}.json`)
     ])
 
     const activitySummary = activities.summary ?? {}
