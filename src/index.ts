@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { bot } from "./bot.js"
 
+export const runtime = 'edge'
+
 const app = new Hono()
 
 app.get("/", (c) => c.text("Bot is running"))
