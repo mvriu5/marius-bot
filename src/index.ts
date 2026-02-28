@@ -19,9 +19,15 @@ app.post("/api/webhooks/telegram", async (c) => {
             backgroundTasks.push(task)
         }
     })
+    console.log("WEBHOOK HANDLER STATUS", response.status)
 
     if (backgroundTasks.length > 0) {
-        await Promise.allSettled(backgroundTasks)
+        const results = await Promise.allSettled(backgroundTasks)
+        for (const result of results) {
+            if (result.status === "rejected") {
+                console.error("WEBHOOK BACKGROUND TASK FAILED", result.reason)
+            }
+        }
     }
 
     return response

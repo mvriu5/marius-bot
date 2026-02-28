@@ -25,9 +25,13 @@ export const bot = new Chat({
 })
 
 bot.onNewMention(async (thread, message) => {
+    console.log("onNewMention fired", { text: message.text, threadId: thread.id })
     await thread.post(`You said: ${message.text}`)
+    console.log("onNewMention post sent", { threadId: thread.id })
 })
 
-bot.onSlashCommand("/fitbit", async (event) => {
-    await event.channel.post("")
+bot.onSubscribedMessage(async (thread, message) => {
+    console.log("onSubscribedMessage fired", { text: message.text, threadId: thread.id })
+    await thread.post(`SUB: You said: ${message.text}`)
+    console.log("onSubscribedMessage post sent", { threadId: thread.id })
 })
