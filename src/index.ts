@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { bot } from "./bot"
+import { bot } from "./bot.js"
 
 const app = new Hono().basePath('/api')
 
