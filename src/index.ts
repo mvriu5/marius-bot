@@ -7,19 +7,16 @@ const app = new Hono()
 app.get("/", (c) => c.text("Bot is running"))
 
 app.post("/api/webhooks/telegram", async (c) => {
-    try {
-        const handler = bot.webhooks.telegram
-        if (!handler) {
-            return c.text("Telegram adapter not configured", 404)
-        }
-        return handler(c.req.raw, {
-            waitUntil: (task) =>
-                waitUntil(task.catch((e) => console.error("[telegram] bg task error", e)))
-        })
-    } catch (error) {
-        console.error("[telegram-webhook] handler error", error)
-        return c.text("ERR", 500)
-    }
+    console.log("WEBHOOK HIT");
+
+    return bot.webhooks.telegram(c.req.raw, {
+        waitUntil: (task) =>
+            waitUntil(
+                task.catch((err) => {
+                    console.error("BACKGROUND ERROR", err);
+                })
+            )
+    })
 })
 
 
