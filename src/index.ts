@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
+import { handle } from 'hono/vercel'
 import { bot } from "./bot.js"
 
-export const runtime = 'edge'
+export const config = { runtime: 'edge' }
 
 const app = new Hono()
 
@@ -18,4 +19,4 @@ app.post("/api/webhooks/telegram", async (c) => {
 })
 
 
-export default app
+export default handle(app)
