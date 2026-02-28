@@ -25,10 +25,10 @@ export const bot = new Chat({
 })
 
 
-bot.onSlashCommand("/fitbit", async (event) => {
-    console.log("onSlashCommand fired", { command: event.command, threadId: event.channel.id })
-    await event.channel.post(`You invoked the /fitbit command with args:`)
-    console.log("onSlashCommand post sent", { threadId: event.channel.id })
+bot.onNewMessage(/^!fitbit/, async (thread, message) => {
+    console.log("onNewMessage fired", { command: message, threadId: thread.id })
+    await thread.post(`You invoked the /fitbit command`)
+    console.log("onNewMessage post sent", { threadId: thread.id })
 })
 
 bot.onNewMention(async (thread, message) => {
