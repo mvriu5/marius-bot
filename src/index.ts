@@ -1,8 +1,5 @@
 import { Hono } from 'hono'
-import { handle } from 'hono/vercel'
 import { bot } from "./bot.js"
-
-export const config = { runtime: 'edge' }
 
 const app = new Hono()
 
@@ -14,9 +11,9 @@ app.post("/api/webhooks/telegram", async (c) => {
         return c.text("Telegram adapter not configured", 404)
     }
     return handler(c.req.raw, {
-        waitUntil: (task) => c.executionCtx.waitUntil(task)
+        waitUntil: (task) => Promise.resolve(task).catch(console.error)
     })
 })
 
 
-export default handle(app)
+export default app
