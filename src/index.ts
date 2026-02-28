@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { bot } from "./bot.js"
+import { bot } from "./bot"
 
 const app = new Hono()
 
