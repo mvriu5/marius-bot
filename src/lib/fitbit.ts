@@ -1,4 +1,4 @@
-import { ensureStateConnected, state } from "../server/state.js"
+import { ensureStateConnected, state } from "../types/state.js"
 
 type FitbitSleepResponse = {
     sleep?: Array<{

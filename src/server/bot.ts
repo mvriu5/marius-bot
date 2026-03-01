@@ -1,7 +1,7 @@
 import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
-import { COMMAND_NAMES, CommandContext, getCommand } from "./command.js"
-import { state } from "./state.js"
+import { COMMAND_NAMES, CommandContext, getCommand, isCommandName } from "../types/command.js"
+import { state } from "../types/state.js"
 import { rememberBriefingTarget } from "../lib/briefing.js"
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN
@@ -23,7 +23,7 @@ export const bot = new Chat({
     }
 })
 
-bot.onNewMention(async (thread, message) => {
+bot.onNewMention(async (thread) => {
     await thread.subscribe()
     await thread.post("Subscribed to thread for commands. Mention me with a command. /help for more info.")
 })
@@ -33,16 +33,18 @@ bot.onSubscribedMessage(async (thread, message) => {
     if (!commandToken.startsWith("/")) return
 
     const command = commandToken.replace(/^\/+/, "")
-    if (!COMMAND_NAMES.includes(command as CommandContext["command"])) return
+    if (!isCommandName(command)) {
+        await thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
+        return
+    }
 
     const ctx: CommandContext = {
         thread,
         message,
-        command: command as CommandContext["command"],
+        command,
         args: message.text.trim().split(/\s+/).slice(1)
     }
 
     await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
-    const cmd = getCommand(ctx.command as CommandContext["command"])
-    await cmd?.execute(ctx)
+    await getCommand(ctx.command)?.execute(ctx)
 })

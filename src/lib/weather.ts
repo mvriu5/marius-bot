@@ -13,10 +13,23 @@ type OpenMeteoResponse = {
     }
 }
 
-// Hardcoded location: Berlin
-const LATITUDE = 52.52
-const LONGITUDE = 13.41
-const LOCATION_LABEL = "Berlin"
+import { ensureStateConnected, state } from "../types/state.js"
+
+type GeocodingResponse = {
+    results?: Array<{
+        name?: string
+        latitude?: number
+        longitude?: number
+        country?: string
+    }>
+}
+
+const DEFAULT_LOCATION = {
+    label: "Berlin",
+    latitude: 52.52,
+    longitude: 13.41
+}
+const WEATHER_LOCATION_KEY_PREFIX = "weather:last-location:"
 
 function weatherCodeToText(code: number | undefined) {
     const map: Record<number, string> = {
@@ -50,10 +63,56 @@ function formatTemp(value: number | undefined) {
     return `${value.toFixed(1)}°C`
 }
 
-export async function getWeatherSummaryMessage() {
+async function resolveLocation(location?: string) {
+    const input = location?.trim()
+    if (!input) return DEFAULT_LOCATION
+
     const params = new URLSearchParams({
-        latitude: String(LATITUDE),
-        longitude: String(LONGITUDE),
+        name: input,
+        count: "1",
+        language: "de",
+        format: "json"
+    })
+
+    const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params.toString()}`)
+    if (!response.ok) {
+        const details = await response.text()
+        throw new Error(`Geocoding error (${response.status}): ${details}`)
+    }
+
+    const data = (await response.json()) as GeocodingResponse
+    const result = data.results?.[0]
+    if (!result || result.latitude === undefined || result.longitude === undefined || !result.name) {
+        throw new Error(`Ort nicht gefunden: ${input}`)
+    }
+
+    const label = result.country ? `${result.name}, ${result.country}` : result.name
+    return { label, latitude: result.latitude, longitude: result.longitude }
+}
+
+function weatherLocationKey(telegramUserId: string) {
+    return `${WEATHER_LOCATION_KEY_PREFIX}${telegramUserId}`
+}
+
+export async function rememberWeatherLocation(telegramUserId: string, location: string) {
+    const trimmed = location.trim()
+    if (!trimmed) return
+
+    await ensureStateConnected()
+    await state.set(weatherLocationKey(telegramUserId), trimmed)
+}
+
+export async function getRememberedWeatherLocation(telegramUserId: string) {
+    await ensureStateConnected()
+    return (await state.get<string>(weatherLocationKey(telegramUserId))) ?? undefined
+}
+
+export async function getWeatherSummaryMessage(location?: string) {
+    const resolved = await resolveLocation(location)
+
+    const params = new URLSearchParams({
+        latitude: String(resolved.latitude),
+        longitude: String(resolved.longitude),
         current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
         daily: "temperature_2m_min,temperature_2m_max,precipitation_probability_max",
         timezone: "Europe/Berlin",
@@ -71,7 +130,7 @@ export async function getWeatherSummaryMessage() {
     const daily = data.daily ?? {}
 
     return [
-        `Wetter (${LOCATION_LABEL}):`,
+        `Wetter (${resolved.label}):`,
         `- Zustand: ${weatherCodeToText(current.weather_code)}`,
         `- Jetzt: ${formatTemp(current.temperature_2m)} (gefuehlt ${formatTemp(current.apparent_temperature)})`,
         `- Wind: ${current.wind_speed_10m ?? "n/a"} km/h`,
