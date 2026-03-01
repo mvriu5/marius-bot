@@ -40,7 +40,7 @@ export async function runDailyBriefing() {
         } as unknown as Thread<Record<string, unknown>, unknown>
 
         const message = {
-            text: "---daily-briefing---",
+            text: "---DAILY-BRIEFING---",
             author: { userId: telegramUserId }
         } as unknown as Message<unknown>
 
