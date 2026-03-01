@@ -3,11 +3,11 @@ import {
     createFitbitAuthorizationUrl,
     getFitbitDailySummaryMessage
 } from "../lib/fitbit.js"
-import { Command, type CommandInit } from "../types/command-base.js"
+import { Command, type CommandDefinition } from "../types/command.js"
 
 type FitbitArgs = [] | [action: "login" | "summary"]
 
-const fitbitCommand: CommandInit<"fitbit", FitbitArgs> = {
+const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
     name: "fitbit",
     argPolicy: { type: "any" },
     execute: async (ctx) => {

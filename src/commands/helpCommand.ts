@@ -1,13 +1,13 @@
-import { Command, type CommandInit } from "../types/command-base.js"
-import { COMMAND_NAMES } from "../types/command.js"
+import { COMMANDS } from "../server/registry.js"
+import { Command, type CommandDefinition } from "../types/command.js"
 
-const helpCommand: CommandInit<"help"> = {
+const helpCommand: CommandDefinition<"help"> = {
     name: "help",
     argPolicy: { type: "any" },
     execute: async (ctx) => {
         await ctx.thread.post(
             `Verfügbare Befehle:\n` +
-            COMMAND_NAMES.map((cmd) => `/${cmd}`).join("\n")
+            Array.from(COMMANDS.values()).map((cmd) => `/${cmd.name}`).join("\n")
         )
     }
 }

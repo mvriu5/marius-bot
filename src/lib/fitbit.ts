@@ -121,6 +121,11 @@ async function loadToken(telegramUserId: string) {
     return state.get<StoredFitbitToken>(tokenKey(telegramUserId))
 }
 
+export async function isFitbitConnected(telegramUserId: string) {
+    const token = await loadToken(telegramUserId)
+    return Boolean(token?.refreshToken)
+}
+
 export async function createFitbitAuthorizationUrl(telegramUserId: string) {
     await ensureStateConnected()
 

@@ -1,21 +1,50 @@
-import { fitbit } from "../commands/fitbitCommand.js"
-import { help } from "../commands/helpCommand.js"
-import { news } from "../commands/newsCommand.js"
-import { weather } from "../commands/weatherCommand.js"
-import { type CommandContext as BaseCommandContext } from "./command-base.js"
+import { Message, Thread } from "chat"
 
-export const commands = [help, fitbit, weather, news] as const
+export type CommandContext<
+    Name extends string = string,
+    Args extends readonly string[] = readonly string[]
+> = {
+    thread: Thread<Record<string, unknown>, unknown>
+    message: Message<unknown>
+    command: Name
+    args: Args
+}
 
-export type CommandName = typeof commands[number]["name"]
-export type CommandContext = BaseCommandContext<CommandName>
-export type Command = (typeof commands)[number]
+export type CommandArgPolicy<Args extends readonly string[] = readonly string[]> =
+    | { type: "none" }
+    | { type: "any" }
+    | { type: "tuple"; length: Args["length"] }
 
-export const COMMAND_NAMES = commands.map((command) => command.name) as CommandName[]
+export type CommandDefinition<
+    Name extends string,
+    Args extends readonly string[] = readonly string[]
+> = {
+    name: Name
+    execute: (ctx: CommandContext<Name, Args>) => Promise<void>
+    argPolicy?: CommandArgPolicy<Args>
+}
 
-const commandNameSet = new Set<string>(COMMAND_NAMES)
+export class Command<
+    Name extends string = string,
+    Args extends readonly string[] = readonly string[]
+> {
+    public readonly name: Name
+    private readonly handler: (ctx: CommandContext<Name, Args>) => Promise<void>
+    public readonly argPolicy: CommandArgPolicy<Args>
 
-export const isCommandName = (value: string): value is CommandName =>
-    commandNameSet.has(value)
+    constructor(init: CommandDefinition<Name, Args>) {
+        this.name = init.name
+        this.handler = init.execute
+        this.argPolicy = init.argPolicy ?? { type: "any" }
+    }
 
-export const getCommand = (name: CommandName): Command | undefined =>
-    commands.find((command) => command.name === name)
+    validateArgs(args: readonly string[]): args is Args {
+        if (this.argPolicy.type === "any") return true
+        if (this.argPolicy.type === "none") return args.length === 0
+        return args.length === this.argPolicy.length
+    }
+
+    async execute(ctx: CommandContext): Promise<void> {
+        await this.handler(ctx as CommandContext<Name, Args>)
+    }
+}

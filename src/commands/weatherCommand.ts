@@ -3,11 +3,11 @@ import {
     getWeatherSummaryMessage,
     rememberWeatherLocation
 } from "../lib/weather.js"
-import { Command, type CommandInit } from "../types/command-base.js"
+import { Command, type CommandDefinition } from "../types/command.js"
 
 type WeatherArgs = string[]
 
-const weatherCommand: CommandInit<"weather", WeatherArgs> = {
+const weatherCommand: CommandDefinition<"weather", WeatherArgs> = {
     name: "weather",
     argPolicy: { type: "any" },
     execute: async (ctx) => {

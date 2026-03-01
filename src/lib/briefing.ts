@@ -5,6 +5,10 @@ import {
     FitbitAuthorizationRequiredError,
     getFitbitDailySummaryMessage
 } from "./fitbit.js"
+import {
+    GoogleAuthorizationRequiredError,
+    getTodayCalendarSummaryMessage
+} from "./googleCalendar.js"
 import { getNewsSummaryMessage } from "./news.js"
 import { getRememberedWeatherLocation, getWeatherSummaryMessage } from "./weather.js"
 
@@ -64,6 +68,19 @@ export async function runDailyBriefing() {
         } catch (error) {
             const details = error instanceof Error ? error.message : String(error)
             await thread.post(`Daily briefing Fehler bei /news: ${details}`)
+        }
+
+        try {
+            const meetingsSummary = await getTodayCalendarSummaryMessage(message.author.userId)
+            await thread.post(meetingsSummary)
+            executed += 1
+        } catch (error) {
+            if (error instanceof GoogleAuthorizationRequiredError) {
+                await thread.post(`Bitte verbinde zuerst Google Calendar: ${error.authorizationUrl}`)
+            } else {
+                const details = error instanceof Error ? error.message : String(error)
+                await thread.post(`Daily briefing Fehler bei /meetings summary: ${details}`)
+            }
         }
 
         try {

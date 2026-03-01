@@ -1,7 +1,7 @@
 import { getNewsSummaryMessage } from "../lib/news.js"
-import { Command, type CommandInit } from "../types/command-base.js"
+import { Command, type CommandDefinition } from "../types/command.js"
 
-const newsCommand: CommandInit<"news"> = {
+const newsCommand: CommandDefinition<"news"> = {
     name: "news",
     argPolicy: { type: "none" },
     execute: async (ctx) => {

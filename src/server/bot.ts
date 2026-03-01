@@ -1,25 +1,14 @@
 import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
-import { COMMAND_NAMES, CommandContext, getCommand, isCommandName } from "../types/command.js"
-import { state } from "../types/state.js"
 import { rememberBriefingTarget } from "../lib/briefing.js"
-
-const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN
-const telegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
-if (!telegramBotToken) throw new Error("Missing TELEGRAM_BOT_TOKEN")
-if (!telegramBotUsername) throw new Error("Missing TELEGRAM_BOT_USERNAME")
+import { state } from "../types/state.js"
+import { CommandContext, getCommand, isValidCommand } from "./registry.js"
 
 export const bot = new Chat({
-    logger: "info",
-    userName: telegramBotUsername,
+    userName: process.env.TELEGRAM_BOT_USERNAME!,
     state,
     adapters: {
-        telegram: createTelegramAdapter({
-            botToken: telegramBotToken,
-            apiBaseUrl: process.env.TELEGRAM_API_BASE_URL,
-            secretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN,
-            userName: telegramBotUsername
-        })
+        telegram: createTelegramAdapter()
     }
 })
 
@@ -29,11 +18,11 @@ bot.onNewMention(async (thread) => {
 })
 
 bot.onSubscribedMessage(async (thread, message) => {
-    const commandToken = message.text.trim().split(/\s+/)[0].toLowerCase()
-    if (!commandToken.startsWith("/")) return
+    const cmdToken = message.text.trim().split(/\s+/)[0].toLowerCase()
+    if (!cmdToken.startsWith("/")) return
 
-    const command = commandToken.replace(/^\/+/, "")
-    if (!isCommandName(command)) {
+    const command = cmdToken.replace(/^\/+/, "")
+    if (!isValidCommand(command)) {
         await thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
         return
     }
