@@ -8,6 +8,7 @@
     "@chat-adapter/state-redis": "^4.15.0",
     "@chat-adapter/telegram": "^4.15.0",
     "@vercel/functions": "^3.4.3",
+    "arctic": "^3.7.0",
     "chat": "^4.15.0",
     "hono": "^4.12.3"
   },
