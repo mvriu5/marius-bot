@@ -1,13 +1,13 @@
 type NewsCategory = "Politik" | "Welt" | "AI/Tech"
 
-export type NewsItem = {
+type NewsItem = {
     category: NewsCategory
     title: string
     link: string
     publishedAt: number
 }
 
-export type NewsSummary = {
+type NewsSummary = {
     errors: string[]
     items: NewsItem[]
 }

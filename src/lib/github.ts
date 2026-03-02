@@ -43,12 +43,12 @@ type StoredOAuthState = {
     telegramUserId: string
 }
 
-export type GithubDailyCommitStats = {
+type GithubDailyCommitStats = {
     totalCommitsToday: number
     byRepository: Array<{ repository: string; count: number }>
 }
 
-export type GithubAssignedItem = {
+type GithubAssignedItem = {
     number: number | null
     title: string
     url: string

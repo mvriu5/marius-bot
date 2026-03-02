@@ -7,11 +7,11 @@ import { news } from "../commands/newsCommand.js"
 import { weather } from "../commands/weatherCommand.js"
 import { type CommandContext as BaseCommandContext } from "../types/command.js"
 
-export const commands = [help, fitbit, weather, news, meetings, account, github] as const
+const commands = [help, fitbit, weather, news, meetings, account, github] as const
 
 export type CommandName = typeof commands[number]["name"]
 export type CommandContext = BaseCommandContext<CommandName>
-export type Command = (typeof commands)[number]
+type Command = (typeof commands)[number]
 
 export const COMMANDS = new Map<CommandName, Command>(
     commands.map((command) => [command.name, command] as const)

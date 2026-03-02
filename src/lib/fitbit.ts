@@ -53,7 +53,7 @@ type StoredOAuthState = {
     telegramUserId: string
 }
 
-export type FitbitDailySummary = {
+type FitbitDailySummary = {
     totalMinutesAsleep: number
     totalTimeInBed: number
     hrvDailyRmssd: number | null

@@ -31,7 +31,7 @@ const DEFAULT_LOCATION = {
 }
 const WEATHER_LOCATION_KEY_PREFIX = "weather:last-location:"
 
-export type WeatherSummary = {
+type WeatherSummary = {
     locationLabel: string
     condition: string
     conditionEmoji: string
