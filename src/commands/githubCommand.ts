@@ -1,10 +1,11 @@
-import { Actions, Button, Card, CardLink, CardText, LinkButton } from "chat"
+﻿import { Actions, Button, Card, CardLink, CardText, LinkButton } from "chat"
 import {
     GithubAuthorizationRequiredError,
     createGithubAuthorizationUrl,
     getGithubAssignedIssues,
     getGithubAssignedPrs,
-    getGithubDailyCommitStats
+    getGithubDailyCommitStats,
+    isGithubConnected
 } from "../lib/github.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -17,13 +18,34 @@ const githubCommand: CommandDefinition<"github", GithubArgs> = {
         const action = ctx.args[0]
 
         if (!action) {
+            const userId = ctx.message.author.userId
+            const connected = await isGithubConnected(userId)
+
+            if (!connected) {
+                try {
+                    const authorizationUrl = await createGithubAuthorizationUrl(userId)
+                    await ctx.thread.post(
+                        Card({
+                            title: "GitHub Login",
+                            children: [
+                                CardText("Bitte verbinde zuerst GitHub:"),
+                                Actions([LinkButton({ url: authorizationUrl, label: "Login" })])
+                            ]
+                        })
+                    )
+                } catch (error) {
+                    const details = error instanceof Error ? error.message : String(error)
+                    await ctx.thread.post(`⚠️ GitHub Login konnte nicht gestartet werden: ${details}`)
+                }
+                return
+            }
+
             await ctx.thread.post(
                 Card({
                     title: "GitHub",
                     children: [
                         CardText("Waehle einen Subcommand:"),
                         Actions([
-                            Button({ id: "command:github:login", label: "Login", value: "github login" }),
                             Button({ id: "command:github:commits", label: "Commits", value: "github commits" }),
                             Button({ id: "command:github:issues", label: "Issues", value: "github issues" }),
                             Button({ id: "command:github:prs", label: "PRs", value: "github prs" })

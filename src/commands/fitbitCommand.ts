@@ -1,8 +1,9 @@
-import { Actions, Button, Card, CardText, LinkButton } from "chat"
+﻿import { Actions, Button, Card, CardText, LinkButton } from "chat"
 import {
     FitbitAuthorizationRequiredError,
     createFitbitAuthorizationUrl,
-    getFitbitData
+    getFitbitData,
+    isFitbitConnected
 } from "../lib/fitbit.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -14,17 +15,36 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
     execute: async (ctx) => {
         const action = ctx.args[0]
         if (!action) {
+            const userId = ctx.message.author.userId
+            const connected = await isFitbitConnected(userId)
+
+            if (!connected) {
+                try {
+                    const authorizationUrl = await createFitbitAuthorizationUrl(userId)
+                    await ctx.thread.post(
+                        Card({
+                            title: "Fitbit Login",
+                            children: [
+                                CardText("Bitte verbinde zuerst Fitbit:"),
+                                Actions([
+                                    LinkButton({ url: authorizationUrl, label: "Login" })
+                                ])
+                            ]
+                        })
+                    )
+                } catch (error) {
+                    const details = error instanceof Error ? error.message : String(error)
+                    await ctx.thread.post(`⚠️ Fitbit Login konnte nicht gestartet werden: ${details}`)
+                }
+                return
+            }
+
             await ctx.thread.post(
                 Card({
                     title: "Fitbit",
                     children: [
                         CardText("Wähle einen Subcommand:"),
                         Actions([
-                            Button({
-                                id: "command:fitbit:login",
-                                label: "🔗 Login",
-                                value: "fitbit login"
-                            }),
                             Button({
                                 id: "command:fitbit:summary",
                                 label: "🗒️ Summary",

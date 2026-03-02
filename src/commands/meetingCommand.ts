@@ -1,8 +1,9 @@
-import { Actions, Button, Card, CardText, LinkButton } from "chat"
+﻿import { Actions, Button, Card, CardText, LinkButton } from "chat"
 import {
     GoogleAuthorizationRequiredError,
     createGoogleAuthorizationUrl,
-    getTodayCalendarEventsSummary
+    getTodayCalendarEventsSummary,
+    isGoogleCalendarConnected
 } from "../lib/googleCalendar.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -14,17 +15,36 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
     execute: async (ctx) => {
         const action = ctx.args[0]
         if (!action) {
+            const userId = ctx.message.author.userId
+            const connected = await isGoogleCalendarConnected(userId)
+
+            if (!connected) {
+                try {
+                    const authorizationUrl = await createGoogleAuthorizationUrl(userId)
+                    await ctx.thread.post(
+                        Card({
+                            title: "Google Login",
+                            children: [
+                                CardText("Bitte verbinde zuerst Google Calendar:"),
+                                Actions([
+                                    LinkButton({ url: authorizationUrl, label: "Login" })
+                                ])
+                            ]
+                        })
+                    )
+                } catch (error) {
+                    const details = error instanceof Error ? error.message : String(error)
+                    await ctx.thread.post(`⚠️ Google Login konnte nicht gestartet werden: ${details}`)
+                }
+                return
+            }
+
             await ctx.thread.post(
                 Card({
                     title: "Meetings",
                     children: [
                         CardText("Wähle einen Subcommand:"),
                         Actions([
-                            Button({
-                                id: "command:meetings:login",
-                                label: "🔗 Login",
-                                value: "meetings login"
-                            }),
                             Button({
                                 id: "command:meetings:summary",
                                 label: "🗒️ Summary",
