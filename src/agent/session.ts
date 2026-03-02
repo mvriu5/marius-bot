@@ -27,3 +27,8 @@ export async function isAgentSessionActive(threadId: string, userId: string): Pr
     }
     return true
 }
+
+export async function clearAgentSession(threadId: string, userId: string): Promise<void> {
+    await ensureStateConnected()
+    await state.delete(key(threadId, userId))
+}
