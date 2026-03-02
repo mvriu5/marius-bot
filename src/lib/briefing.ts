@@ -60,10 +60,8 @@ export async function runDailyBriefing() {
 
             const lines = [
                 "Fitbit Tagesuebersicht:",
-                `- Sleep Score: ${fitbitSummary.sleepScore ?? "n/a"}`,
                 `- Schlaf: ${formatMinutes(fitbitSummary.totalMinutesAsleep)} (im Bett: ${formatMinutes(fitbitSummary.totalTimeInBed)})`,
                 `- HRV (daily RMSSD): ${fitbitSummary.hrvDailyRmssd ?? "n/a"} ms`,
-                `- HRV (deep RMSSD): ${fitbitSummary.hrvDeepRmssd ?? "n/a"} ms`,
                 `- Tiefste Herzfrequenz: ${fitbitSummary.lowestHeartRate ?? "n/a"} bpm`
             ]
             await thread.post(lines.join("\n"))

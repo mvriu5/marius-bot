@@ -77,7 +77,6 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
                 Card({
                     title: "Fitbit Tagesübersicht",
                     children: [
-                        CardText(`💤 Sleep Score: ${summary.sleepScore ?? "n/a"}`),
                         CardText(`🕑 Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
                         CardText(`💓 HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
                         CardText(`📉 Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)

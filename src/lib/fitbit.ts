@@ -3,7 +3,6 @@ import { ensureStateConnected, state } from "../types/state.js"
 type FitbitSleepResponse = {
     sleep?: Array<{
         isMainSleep?: boolean
-        efficiency?: number
     }>
     summary?: {
         totalMinutesAsleep?: number
@@ -55,11 +54,9 @@ type StoredOAuthState = {
 }
 
 export type FitbitDailySummary = {
-    sleepScore: number | null
     totalMinutesAsleep: number
     totalTimeInBed: number
     hrvDailyRmssd: number | null
-    hrvDeepRmssd: number | null
     lowestHeartRate: number | null
 }
 
@@ -99,16 +96,6 @@ function oauthStateKey(stateId: string) {
 
 function newStateId() {
     return `fitbit_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
-}
-
-function formatMinutes(totalMinutes: number | undefined) {
-    if (!totalMinutes || totalMinutes <= 0) return "0m"
-
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-
-    if (hours === 0) return `${minutes}m`
-    return `${hours}h ${minutes}m`
 }
 
 function getTodayDateString() {
@@ -268,17 +255,14 @@ export async function getFitbitDailySummaryMessage(telegramUserId: string): Prom
 
     const sleepSummary = sleep.summary ?? {}
     const mainSleep = sleep.sleep?.find((entry) => entry.isMainSleep) ?? sleep.sleep?.[0]
-    const sleepScore = mainSleep?.efficiency ?? null
     const hrvValue = hrv.hrv?.[0]?.value
     const heartRates = heartIntraday["activities-heart-intraday"]?.dataset?.map((entry) => entry.value) ?? []
     const lowestHeartRate = heartRates.length > 0 ? Math.min(...heartRates) : null
 
     return {
-        sleepScore,
         totalMinutesAsleep: sleepSummary.totalMinutesAsleep ?? 0,
         totalTimeInBed: sleepSummary.totalTimeInBed ?? 0,
         hrvDailyRmssd: hrvValue?.dailyRmssd ?? null,
-        hrvDeepRmssd: hrvValue?.deepRmssd ?? null,
         lowestHeartRate
     }
 }
