@@ -63,7 +63,15 @@ export async function runDailyBriefing() {
 
         try {
             const newsSummary = await getNewsSummaryMessage()
-            await thread.post(newsSummary)
+            const lines = [
+                `News Briefing (${newsSummary.items.length} Meldungen):`,
+                ...newsSummary.items.map((item, index) => `${index + 1}. [${item.category}] ${item.title}\n${item.link}`)
+            ]
+            if (newsSummary.errors.length > 0) {
+                lines.push("")
+                lines.push(`Hinweis: ${newsSummary.errors.length} Feed(s) konnten nicht geladen werden.`)
+            }
+            await thread.post(lines.join("\n"))
             executed += 1
         } catch (error) {
             const details = error instanceof Error ? error.message : String(error)

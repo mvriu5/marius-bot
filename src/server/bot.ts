@@ -19,6 +19,9 @@ bot.onNewMention(async (thread) => {
 
 const helpActionIds = Array.from(COMMANDS.values()).map((cmd) => `help:${cmd.name}`)
 const meetingActionIds = ["command:meetings:login", "command:meetings:summary"]
+const fitbitActionIds = ["command:fitbit:login", "command:fitbit:summary"]
+
+const actionIds = [...helpActionIds, ...meetingActionIds, ...fitbitActionIds]
 
 function parseActionToCommand(actionId: string, value?: string): { command: string; args: string[] } {
     const valueParts = (value ?? "").trim().split(/\s+/).filter(Boolean)
@@ -39,7 +42,7 @@ function parseActionToCommand(actionId: string, value?: string): { command: stri
     return { command: "", args: [] }
 }
 
-bot.onAction([...helpActionIds, ...meetingActionIds], async (event) => {
+bot.onAction(actionIds, async (event) => {
     const { command, args } = parseActionToCommand(event.actionId, event.value)
     if (!isValidCommand(command)) {
         await event.thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)

@@ -1,10 +1,15 @@
 type NewsCategory = "Politik" | "Welt" | "AI/Tech"
 
-type NewsItem = {
+export type NewsItem = {
     category: NewsCategory
     title: string
     link: string
     publishedAt: number
+}
+
+export type NewsSummary = {
+    errors: string[]
+    items: NewsItem[]
 }
 
 const RSS_SOURCES: Array<{ category: NewsCategory; url: string }> = [
@@ -67,7 +72,7 @@ function dedupeByTitle(items: NewsItem[]) {
     return deduped
 }
 
-export async function getNewsSummaryMessage(limit = 8) {
+export async function getNewsSummaryMessage(limit = 8): Promise<NewsSummary> {
     const clampedLimit = Math.max(5, Math.min(10, limit))
 
     const results = await Promise.allSettled(
@@ -100,15 +105,8 @@ export async function getNewsSummaryMessage(limit = 8) {
         throw new Error(`Keine News gefunden${errors.length ? ` (${errors.join("; ")})` : ""}`)
     }
 
-    const lines = [
-        `News Briefing (${topItems.length} Meldungen):`,
-        ...topItems.map((item, index) => `${index + 1}. [${item.category}] ${item.title}\n${item.link}`)
-    ]
-
-    if (errors.length > 0) {
-        lines.push("")
-        lines.push(`Hinweis: ${errors.length} Feed(s) konnten nicht geladen werden.`)
+    return {
+        items: topItems,
+        errors
     }
-
-    return lines.join("\n")
 }

@@ -1,3 +1,4 @@
+import { Actions, Button, Card, CardText, LinkButton } from "chat"
 import {
     FitbitAuthorizationRequiredError,
     createFitbitAuthorizationUrl,
@@ -14,9 +15,24 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
         const action = ctx.args[0]
         if (!action) {
             await ctx.thread.post(
-                "Fitbit Subcommands:\n" +
-                "- /fitbit login\n" +
-                "- /fitbit summary"
+                Card({
+                    title: "Fitbit",
+                    children: [
+                        CardText("Wähle einen Subcommand:"),
+                        Actions([
+                            Button({
+                                id: "command:fitbit:login",
+                                label: "Login",
+                                value: "fitbit login"
+                            }),
+                            Button({
+                                id: "command:fitbit:summary",
+                                label: "Summary",
+                                value: "fitbit summary"
+                            })
+                        ])
+                    ]
+                })
             )
             return
         }
@@ -24,7 +40,17 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
         if (action === "login") {
             try {
                 const authorizationUrl = await createFitbitAuthorizationUrl(ctx.message.author.userId)
-                await ctx.thread.post(`Bitte verbinde Fitbit hier: ${authorizationUrl}`)
+                await ctx.thread.post(
+                    Card({
+                        title: "Fitbit Login",
+                        children: [
+                            CardText("Bitte verbinde Fitbit hier:"),
+                            Actions([
+                                LinkButton({ url: authorizationUrl, label: "Login" })
+                            ])
+                        ]
+                    })
+                )
             } catch (error) {
                 const details = error instanceof Error ? error.message : String(error)
                 await ctx.thread.post(`Fitbit Login konnte nicht gestartet werden: ${details}`)
@@ -33,7 +59,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
         }
 
         if (action !== "summary") {
-            await ctx.thread.post("Unbekannter Fitbit-Subcommand. Erlaubt: login, summary")
+            await ctx.thread.post("Unbekannter Fitbit-Subcommand.")
             return
         }
 
@@ -42,7 +68,17 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
             await ctx.thread.post(summary)
         } catch (error) {
             if (error instanceof FitbitAuthorizationRequiredError) {
-                await ctx.thread.post(`Bitte verbinde zuerst Fitbit: ${error.authorizationUrl}`)
+                await ctx.thread.post(
+                    Card({
+                        title: "Fitbit Login",
+                        children: [
+                            CardText("Bitte verbinde zuerst Fitbit:"),
+                            Actions([
+                                LinkButton({ url: error.authorizationUrl, label: "Login here" })
+                            ])
+                        ]
+                    })
+                )
                 return
             }
 

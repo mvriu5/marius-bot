@@ -22,12 +22,12 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
                         Actions([
                             Button({
                                 id: "command:meetings:login",
-                                label: "/meetings login",
+                                label: "Login",
                                 value: "meetings login"
                             }),
                             Button({
                                 id: "command:meetings:summary",
-                                label: "/meetings summary",
+                                label: "Summary",
                                 value: "meetings summary"
                             })
                         ])
@@ -46,7 +46,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
                         children: [
                             CardText("Bitte verbinde Google Calendar hier:"),
                             Actions([
-                                LinkButton({ url: authorizationUrl, label: "Login here" })
+                                LinkButton({ url: authorizationUrl, label: "Login" })
                             ])
                         ]
                     })
