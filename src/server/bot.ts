@@ -1,6 +1,7 @@
 import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
 import { rememberBriefingTarget } from "../lib/briefing.js"
+import { trackMessage } from "../lib/messageHistory.js"
 import { state } from "../types/state.js"
 import { COMMANDS, CommandContext, getCommand, isValidCommand } from "./registry.js"
 
@@ -66,6 +67,8 @@ bot.onAction(actionIds, async (event) => {
 })
 
 bot.onSubscribedMessage(async (thread, message) => {
+    await trackMessage(thread.id, message.id)
+
     const cmdToken = message.text.trim().split(/\s+/)[0].toLowerCase()
     if (!cmdToken.startsWith("/")) return
 
