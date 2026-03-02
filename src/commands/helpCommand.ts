@@ -1,4 +1,5 @@
-import { Actions, Button, Card, CardText } from "chat"
+import { Card, CardText } from "chat"
+import { ButtonGrid } from "../components/buttonGrid.js"
 import { COMMANDS } from "../server/registry.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -28,15 +29,14 @@ const helpCommand: CommandDefinition<"help"> = {
                 title: "📢 Verfügbare Befehle",
                 children: [
                     CardText("Wähle einen Befehl:"),
-                    Actions(
-                        Array.from(COMMANDS.values()).map((cmd) =>
-                            Button({
-                                id: `help:${cmd.name}`,
-                                label: `/${cmd.name}`,
-                                value: cmd.name
-                            })
-                        )
-                    ),
+                    ...ButtonGrid({
+                        buttons: Array.from(COMMANDS.values()).map((cmd) => ({
+                            id: `help:${cmd.name}`,
+                            label: `/${cmd.name}`,
+                            value: cmd.name
+                        })),
+                        columns: 2
+                    }),
                     ...(subcommandLines.length > 0
                         ? [
                             CardText("Erlaubte Subcommands:"),
