@@ -8,7 +8,7 @@ const newsCommand: CommandDefinition<"news"> = {
     execute: async (ctx) => {
         try {
             const summary = await getTodayNews()
-            const titleLines = summary.items.map((item, index) => `${index + 1}. [${item.category}] ${item.title}`)
+            const titleLines = summary.items.map((item, index) => `${index + 1}. [${item.category}] - ${item.title}`)
 
             await ctx.thread.post(
                 Card({
