@@ -5,7 +5,7 @@ import { isAgentSessionActive } from "../agent/session.js"
 import { rememberBriefingTarget } from "../lib/briefing.js"
 import { trackMessage } from "../lib/messageHistory.js"
 import { state } from "../types/state.js"
-import { COMMANDS, CommandContext, getCommand, isValidCommand } from "./registry.js"
+import { COMMAND_ACTION_IDS, CommandContext, getCommand, HELP_ACTION_IDS, isValidCommand } from "./registry.js"
 import { parseActionToCommand } from "../lib/utils.js"
 
 export const bot = new Chat({
@@ -16,12 +16,8 @@ export const bot = new Chat({
     }
 })
 
-const helpActionIds = Array.from(COMMANDS.values()).map((cmd) => `help:${cmd.name}`)
-const meetingActionIds = ["command:meetings:login", "command:meetings:summary"]
-const fitbitActionIds = ["command:fitbit:login", "command:fitbit:summary"]
-const githubActionIds = ["command:github:login", "command:github:commits", "command:github:issues", "command:github:prs"]
 const agentActionIds = ["agent:choice"]
-const actionIds = [...helpActionIds, ...meetingActionIds, ...fitbitActionIds, ...githubActionIds, ...agentActionIds]
+const actionIds = [...HELP_ACTION_IDS, ...COMMAND_ACTION_IDS, ...agentActionIds]
 
 bot.onNewMention(async (thread) => {
     await thread.subscribe()
@@ -71,7 +67,7 @@ bot.onSubscribedMessage(async (thread, message) => {
 
     const command = cmdToken.replace(/^\/+/, "")
     if (!isValidCommand(command)) {
-        await thread.post(`Unbekannter Befehl: ${command}. /help fuer eine Liste der verfuegbaren Befehle.`)
+        await thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
         return
     }
 

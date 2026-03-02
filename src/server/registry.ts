@@ -10,14 +10,97 @@ import { news } from "../commands/newsCommand.js"
 import { weather } from "../commands/weatherCommand.js"
 import { type CommandContext as BaseCommandContext } from "../types/command.js"
 
-const commands = [help, clear, fitbit, weather, news, meetings, account, github, analytics, agent] as const
+export const COMMAND_ENTRIES = [
+    {
+        command: help,
+        description: "Zeigt alle verfügbaren Befehle.",
+        subcommands: [] as const,
+        actionIds: [] as const
+    },
+    {
+        command: clear,
+        description: "Loescht Bot-Nachrichten im aktuellen Thread.",
+        subcommands: [] as const,
+        actionIds: [] as const
+    },
+    {
+        command: fitbit,
+        description: "Zeigt Fitbit-Daten und Login-Optionen.",
+        subcommands: ["login", "summary"] as const,
+        actionIds: ["command:fitbit:login", "command:fitbit:summary"] as const
+    },
+    {
+        command: weather,
+        description: "Zeigt das Wetter oder speichert eine Standard-Location.",
+        subcommands: ["set <location>"] as const,
+        actionIds: [] as const
+    },
+    {
+        command: news,
+        description: "Liest die aktuellen News-Feeds.",
+        subcommands: [] as const,
+        actionIds: [] as const
+    },
+    {
+        command: meetings,
+        description: "Zeigt heutige Kalender-Meetings.",
+        subcommands: ["login", "summary"] as const,
+        actionIds: ["command:meetings:login", "command:meetings:summary"] as const
+    },
+    {
+        command: account,
+        description: "Zeigt den Verbindungsstatus aller Integrationen.",
+        subcommands: [] as const,
+        actionIds: [] as const
+    },
+    {
+        command: github,
+        description: "Zeigt GitHub Commits, Issues und PRs.",
+        subcommands: ["login", "commits", "issues", "prs"] as const,
+        actionIds: [
+            "command:github:login",
+            "command:github:commits",
+            "command:github:issues",
+            "command:github:prs"
+        ] as const
+    },
+    {
+        command: analytics,
+        description: "Zeigt Website-Analytics der letzten 24 Stunden.",
+        subcommands: ["<site (optional)>"] as const,
+        actionIds: [] as const
+    },
+    {
+        command: agent,
+        description: "Aktiviert den Agent-Modus oder beantwortet eine Frage.",
+        subcommands: ["<frage>"] as const,
+        actionIds: [] as const
+    }
+] as const
 
-export type CommandName = typeof commands[number]["name"]
+export type CommandName = typeof COMMAND_ENTRIES[number]["command"]["name"]
 export type CommandContext = BaseCommandContext<CommandName>
-type Command = (typeof commands)[number]
+type Command = (typeof COMMAND_ENTRIES)[number]["command"]
+
+export type CommandMetadata = {
+    description: string
+    subcommands: readonly string[]
+    actionIds: readonly string[]
+}
 
 export const COMMANDS = new Map<CommandName, Command>(
-    commands.map((command) => [command.name, command] as const)
+    COMMAND_ENTRIES.map((entry) => [entry.command.name, entry.command] as const)
+)
+
+export const COMMAND_METADATA = new Map<CommandName, CommandMetadata>(
+    COMMAND_ENTRIES.map((entry) => [
+        entry.command.name,
+        {
+            description: entry.description,
+            subcommands: entry.subcommands,
+            actionIds: entry.actionIds
+        }
+    ] as const)
 )
 
 export const isValidCommand = (value: string): value is CommandName =>
@@ -25,3 +108,7 @@ export const isValidCommand = (value: string): value is CommandName =>
 
 export const getCommand = (name: CommandName): Command | undefined =>
     COMMANDS.get(name)
+
+export const HELP_ACTION_IDS = COMMAND_ENTRIES.map((entry) => `help:${entry.command.name}`)
+
+export const COMMAND_ACTION_IDS = COMMAND_ENTRIES.flatMap((entry) => entry.actionIds)

@@ -1,27 +1,23 @@
 import { Card, CardText } from "chat"
 import { ButtonGrid } from "../components/buttonGrid.js"
-import { COMMANDS } from "../server/registry.js"
+import { COMMAND_ENTRIES, COMMAND_METADATA } from "../server/registry.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 import { capitalizeFirstLetter } from "../lib/utils.js"
-
-const COMMAND_SUBCOMMANDS: Partial<Record<string, readonly string[]>> = {
-    agent: ["<frage>"],
-    analytics: ["<site (optional)>"],
-    fitbit: ["login", "summary"],
-    github: ["login", "commits", "issues", "prs"],
-    meetings: ["login", "summary"],
-    weather: ["set <location>"]
-}
 
 const helpCommand: CommandDefinition<"help"> = {
     name: "help",
     argPolicy: { type: "any" },
     execute: async (ctx) => {
-        const subcommandLines = Array.from(COMMANDS.values())
-            .map((cmd) => {
-                const subcommands = COMMAND_SUBCOMMANDS[cmd.name]
+        const commandLines = COMMAND_ENTRIES.map(({ command }) => {
+            const description = COMMAND_METADATA.get(command.name)?.description ?? "Keine Beschreibung."
+            return `/${command.name}: ${description}`
+        })
+
+        const subcommandLines = COMMAND_ENTRIES
+            .map(({ command }) => {
+                const subcommands = COMMAND_METADATA.get(command.name)?.subcommands ?? []
                 if (!subcommands || subcommands.length === 0) return null
-                return `/${cmd.name}: ${subcommands.join(", ")}`
+                return `/${command.name}: ${subcommands.join(", ")}`
             })
             .filter((line): line is string => Boolean(line))
 
@@ -31,12 +27,14 @@ const helpCommand: CommandDefinition<"help"> = {
                 children: [
                     CardText("Wähle einen Befehl:"),
                     ...ButtonGrid({
-                        buttons: Array.from(COMMANDS.values()).map((cmd) => ({
-                            id: `help:${cmd.name}`,
-                            label: capitalizeFirstLetter(cmd.name),
-                            value: cmd.name
+                        buttons: COMMAND_ENTRIES.map(({ command }) => ({
+                            id: `help:${command.name}`,
+                            label: capitalizeFirstLetter(command.name),
+                            value: command.name
                         }))
                     }),
+                    CardText("Befehlsübersicht:"),
+                    CardText(commandLines.join("\n")),
                     ...(subcommandLines.length > 0
                         ? [
                             CardText("Erlaubte Subcommands:"),
