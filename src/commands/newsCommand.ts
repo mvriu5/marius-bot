@@ -1,5 +1,5 @@
 import { Actions, Card, CardText, Divider, LinkButton } from "chat"
-import { getNewsSummaryMessage } from "../lib/news.js"
+import { getTodayNews } from "../lib/news.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
 const newsCommand: CommandDefinition<"news"> = {
@@ -7,7 +7,7 @@ const newsCommand: CommandDefinition<"news"> = {
     argPolicy: { type: "none" },
     execute: async (ctx) => {
         try {
-            const summary = await getNewsSummaryMessage()
+            const summary = await getTodayNews()
             const titleLines = summary.items.map((item, index) => `${index + 1}. [${item.category}] ${item.title}`)
 
             await ctx.thread.post(

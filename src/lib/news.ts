@@ -72,7 +72,7 @@ function dedupeByTitle(items: NewsItem[]) {
     return deduped
 }
 
-export async function getNewsSummaryMessage(limit = 8): Promise<NewsSummary> {
+export async function getTodayNews(limit = 8): Promise<NewsSummary> {
     const clampedLimit = Math.max(5, Math.min(10, limit))
 
     const results = await Promise.allSettled(

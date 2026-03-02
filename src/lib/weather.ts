@@ -129,7 +129,7 @@ export async function getRememberedWeatherLocation(telegramUserId: string) {
     return (await state.get<string>(weatherLocationKey(telegramUserId))) ?? undefined
 }
 
-export async function getWeatherSummaryMessage(location?: string): Promise<WeatherSummary> {
+export async function getTodayWeather(location?: string): Promise<WeatherSummary> {
     const resolved = await resolveLocation(location)
 
     const params = new URLSearchParams({

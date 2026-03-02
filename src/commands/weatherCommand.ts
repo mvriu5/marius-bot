@@ -1,7 +1,7 @@
 import { Card, CardText } from "chat"
 import {
     getRememberedWeatherLocation,
-    getWeatherSummaryMessage,
+    getTodayWeather,
     rememberWeatherLocation
 } from "../lib/weather.js"
 import { Command, type CommandDefinition } from "../types/command.js"
@@ -24,7 +24,7 @@ const weatherCommand: CommandDefinition<"weather", WeatherArgs> = {
                     return
                 }
 
-                const summary = await getWeatherSummaryMessage(locationToSet)
+                const summary = await getTodayWeather(locationToSet)
                 await rememberWeatherLocation(userId, locationToSet)
 
                 await ctx.thread.post(
@@ -48,7 +48,7 @@ const weatherCommand: CommandDefinition<"weather", WeatherArgs> = {
                 }
             }
 
-            const summary = await getWeatherSummaryMessage(locationForQuery)
+            const summary = await getTodayWeather(locationForQuery)
             const formatTemp = (value: number | undefined) => value === undefined || Number.isNaN(value) ? "n/a" : `${value.toFixed(1)}C`
 
             await ctx.thread.post(

@@ -232,7 +232,7 @@ async function fetchFitbitJson<T>(accessToken: string, path: string): Promise<T>
     return response.json() as Promise<T>
 }
 
-export async function getFitbitDailySummaryMessage(telegramUserId: string): Promise<FitbitDailySummary> {
+export async function getFitbitData(telegramUserId: string): Promise<FitbitDailySummary> {
     const validToken = await getValidAccessTokenForUser(telegramUserId)
     const userIdForApi = validToken.fitbitUserId
     const date = getTodayDateString()

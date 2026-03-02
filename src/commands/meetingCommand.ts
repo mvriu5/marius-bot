@@ -2,7 +2,7 @@ import { Actions, Button, Card, CardText, LinkButton } from "chat"
 import {
     GoogleAuthorizationRequiredError,
     createGoogleAuthorizationUrl,
-    getTodayCalendarSummaryMessage
+    getTodayCalendarEventsSummary
 } from "../lib/googleCalendar.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -65,7 +65,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
         }
 
         try {
-            const summary = await getTodayCalendarSummaryMessage(ctx.message.author.userId)
+            const summary = await getTodayCalendarEventsSummary(ctx.message.author.userId)
             await ctx.thread.post(summary)
         } catch (error) {
             if (error instanceof GoogleAuthorizationRequiredError) {

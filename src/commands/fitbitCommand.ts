@@ -2,7 +2,7 @@ import { Actions, Button, Card, CardText, LinkButton } from "chat"
 import {
     FitbitAuthorizationRequiredError,
     createFitbitAuthorizationUrl,
-    getFitbitDailySummaryMessage
+    getFitbitData
 } from "../lib/fitbit.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -64,7 +64,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
         }
 
         try {
-            const summary = await getFitbitDailySummaryMessage(ctx.message.author.userId)
+            const summary = await getFitbitData(ctx.message.author.userId)
             const formatMinutes = (totalMinutes: number) => {
                 if (!totalMinutes || totalMinutes <= 0) return "0m"
                 const hours = Math.floor(totalMinutes / 60)

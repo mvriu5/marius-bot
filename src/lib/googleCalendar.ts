@@ -270,7 +270,7 @@ async function fetchTodayEvents(accessToken: string) {
     return (await response.json()) as GoogleCalendarEventsResponse
 }
 
-export async function getTodayCalendarSummaryMessage(telegramUserId: string) {
+export async function getTodayCalendarEventsSummary(telegramUserId: string) {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const eventsResponse = await fetchTodayEvents(accessToken)
     const events = eventsResponse.items ?? []
