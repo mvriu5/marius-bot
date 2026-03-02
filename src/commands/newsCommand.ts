@@ -16,7 +16,7 @@ const newsCommand: CommandDefinition<"news"> = {
                     children: [
                         ...(titleLines.map((line) =>
                             CardText(line),
-                            Divider
+                            Divider()
                         )),
                         Actions(
                             summary.items.map((item, index) =>
