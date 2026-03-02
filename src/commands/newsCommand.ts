@@ -11,20 +11,20 @@ const newsCommand: CommandDefinition<"news"> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `News (${summary.items.length} Meldungen)`,
+                    title: `🗞️ News (${summary.items.length} Meldungen)`,
                     children: [
                         ...summary.items.map((item, index) =>
                             CardLink({ url: item.link, label: `${index + 1}. [${item.category}] ${item.title}` })
                         ),
                         ...(summary.errors.length > 0
-                            ? [CardText(`Hinweis: ${summary.errors.length} Feed(s) konnten nicht geladen werden.`)]
+                            ? [CardText(`⚠️ Hinweis: ${summary.errors.length} Feed(s) konnten nicht geladen werden.`)]
                             : [])
                     ]
                 })
             )
         } catch (error) {
             const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`News konnten nicht geladen werden: ${details}`)
+            await ctx.thread.post(`⚠️ News konnten nicht geladen werden: ${details}`)
         }
     }
 }

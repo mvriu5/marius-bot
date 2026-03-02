@@ -31,12 +31,24 @@ const DEFAULT_LOCATION = {
 }
 const WEATHER_LOCATION_KEY_PREFIX = "weather:last-location:"
 
+export type WeatherSummary = {
+    locationLabel: string
+    condition: string
+    conditionEmoji: string
+    temperatureC?: number
+    apparentTemperatureC?: number
+    windSpeedKmh?: number
+    minTempC?: number
+    maxTempC?: number
+    precipitationProbabilityPct?: number
+}
+
 function weatherCodeToText(code: number | undefined) {
     const map: Record<number, string> = {
         0: "Klar",
-        1: "Ueberwiegend klar",
-        2: "Teilweise bewolkt",
-        3: "Bewoelkt",
+        1: "Überwiegend klar",
+        2: "Teilweise bewölkt",
+        3: "Bewölkt",
         45: "Nebel",
         48: "Reifnebel",
         51: "Leichter Nieselregen",
@@ -58,9 +70,19 @@ function weatherCodeToText(code: number | undefined) {
     return map[code] ?? `Code ${code}`
 }
 
-function formatTemp(value: number | undefined) {
-    if (value === undefined || Number.isNaN(value)) return "n/a"
-    return `${value.toFixed(1)}°C`
+function weatherCodeToEmoji(code: number | undefined) {
+    if (code === undefined) return "❓"
+
+    if (code === 0 || code === 1) return "☀️"
+    if (code === 2 || code === 3) return "⛅"
+    if (code === 45 || code === 48) return "🌫️"
+    if (code === 51 || code === 53 || code === 55) return "🌦️"
+    if (code === 61 || code === 63 || code === 65) return "🌧️"
+    if (code === 71 || code === 73 || code === 75) return "🌨️"
+    if (code === 80 || code === 81 || code === 82) return "🌦️"
+    if (code === 95) return "⛈️"
+
+    return "🌡️"
 }
 
 async function resolveLocation(location?: string) {
@@ -107,7 +129,7 @@ export async function getRememberedWeatherLocation(telegramUserId: string) {
     return (await state.get<string>(weatherLocationKey(telegramUserId))) ?? undefined
 }
 
-export async function getWeatherSummaryMessage(location?: string) {
+export async function getWeatherSummaryMessage(location?: string): Promise<WeatherSummary> {
     const resolved = await resolveLocation(location)
 
     const params = new URLSearchParams({
@@ -129,12 +151,15 @@ export async function getWeatherSummaryMessage(location?: string) {
     const current = data.current ?? {}
     const daily = data.daily ?? {}
 
-    return [
-        `Wetter (${resolved.label}):`,
-        `- Zustand: ${weatherCodeToText(current.weather_code)}`,
-        `- Jetzt: ${formatTemp(current.temperature_2m)} (gefuehlt ${formatTemp(current.apparent_temperature)})`,
-        `- Wind: ${current.wind_speed_10m ?? "n/a"} km/h`,
-        `- Heute min/max: ${formatTemp(daily.temperature_2m_min?.[0])} / ${formatTemp(daily.temperature_2m_max?.[0])}`,
-        `- Regenwahrscheinlichkeit: ${daily.precipitation_probability_max?.[0] ?? "n/a"} %`
-    ].join("\n")
+    return {
+        locationLabel: resolved.label,
+        condition: weatherCodeToText(current.weather_code),
+        conditionEmoji: weatherCodeToEmoji(current.weather_code),
+        temperatureC: current.temperature_2m,
+        apparentTemperatureC: current.apparent_temperature,
+        windSpeedKmh: current.wind_speed_10m,
+        minTempC: daily.temperature_2m_min?.[0],
+        maxTempC: daily.temperature_2m_max?.[0],
+        precipitationProbabilityPct: daily.precipitation_probability_max?.[0]
+    }
 }

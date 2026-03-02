@@ -4,7 +4,8 @@ import { Command, type CommandDefinition } from "../types/command.js"
 
 const COMMAND_SUBCOMMANDS: Partial<Record<string, readonly string[]>> = {
     fitbit: ["login", "summary"],
-    meetings: ["login", "summary"]
+    meetings: ["login", "summary"],
+    weather: ["set <location>"]
 }
 
 const helpCommand: CommandDefinition<"help"> = {
@@ -21,7 +22,7 @@ const helpCommand: CommandDefinition<"help"> = {
 
         await ctx.thread.post(
             Card({
-                title: "Verfügbare Befehle",
+                title: "📢 Verfügbare Befehle",
                 children: [
                     CardText("Wähle einen Befehl:"),
                     Actions(

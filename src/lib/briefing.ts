@@ -94,7 +94,17 @@ export async function runDailyBriefing() {
         try {
             const location = await getRememberedWeatherLocation(telegramUserId)
             const weatherSummary = await getWeatherSummaryMessage(location)
-            await thread.post(weatherSummary)
+            const formatTemp = (value: number | undefined) =>
+                value === undefined || Number.isNaN(value) ? "n/a" : `${value.toFixed(1)}C`
+            const lines = [
+                `Wetter (${weatherSummary.locationLabel}):`,
+                `- Zustand: ${weatherSummary.condition}`,
+                `- Jetzt: ${formatTemp(weatherSummary.temperatureC)} (gefuehlt ${formatTemp(weatherSummary.apparentTemperatureC)})`,
+                `- Wind: ${weatherSummary.windSpeedKmh ?? "n/a"} km/h`,
+                `- Heute min/max: ${formatTemp(weatherSummary.minTempC)} / ${formatTemp(weatherSummary.maxTempC)}`,
+                `- Regenwahrscheinlichkeit: ${weatherSummary.precipitationProbabilityPct ?? "n/a"} %`
+            ]
+            await thread.post(lines.join("\n"))
             executed += 1
         } catch (error) {
             const details = error instanceof Error ? error.message : String(error)

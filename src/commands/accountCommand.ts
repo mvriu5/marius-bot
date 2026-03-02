@@ -15,8 +15,8 @@ const accountCommand: CommandDefinition<"account"> = {
             ])
 
             const statusLines = [
-                `Fitbit: ${fitbitConnected ? "verbunden" : "nicht verbunden"}`,
-                `Google Calendar: ${googleConnected ? "verbunden" : "nicht verbunden"}`
+                `Fitbit: ${fitbitConnected ? "✅" : "🚫"}`,
+                `Google Calendar: ${googleConnected ? "✅" : "🚫"}`
             ]
 
             const loginButtons = [
@@ -35,13 +35,13 @@ const accountCommand: CommandDefinition<"account"> = {
                                 CardText("Nicht verbundene Dienste:"),
                                 Actions(availableLoginButtons)
                             ]
-                            : [CardText("Alle Dienste sind verbunden.")])
+                            : [CardText("✅ Alle Dienste sind verbunden.")])
                     ]
                 })
             )
         } catch (error) {
             const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`Account-Status konnte nicht geladen werden: ${details}`)
+            await ctx.thread.post(`⚠️ Account-Status konnte nicht geladen werden: ${details}`)
         }
     }
 }

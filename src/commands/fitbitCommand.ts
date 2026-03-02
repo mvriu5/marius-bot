@@ -22,12 +22,12 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
                         Actions([
                             Button({
                                 id: "command:fitbit:login",
-                                label: "Login",
+                                label: "🔗 Login",
                                 value: "fitbit login"
                             }),
                             Button({
                                 id: "command:fitbit:summary",
-                                label: "Summary",
+                                label: "🗒️ Summary",
                                 value: "fitbit summary"
                             })
                         ])
@@ -53,13 +53,13 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
                 )
             } catch (error) {
                 const details = error instanceof Error ? error.message : String(error)
-                await ctx.thread.post(`Fitbit Login konnte nicht gestartet werden: ${details}`)
+                await ctx.thread.post(`⚠️ Fitbit Login konnte nicht gestartet werden: ${details}`)
             }
             return
         }
 
         if (action !== "summary") {
-            await ctx.thread.post("Unbekannter Fitbit-Subcommand.")
+            await ctx.thread.post("⚠️ Unbekannter Fitbit-Subcommand.")
             return
         }
 
@@ -74,7 +74,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
                         children: [
                             CardText("Bitte verbinde zuerst Fitbit:"),
                             Actions([
-                                LinkButton({ url: error.authorizationUrl, label: "Login here" })
+                                LinkButton({ url: error.authorizationUrl, label: "Login" })
                             ])
                         ]
                     })
@@ -83,7 +83,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
             }
 
             const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`Fitbit konnte nicht geladen werden: ${details}`)
+            await ctx.thread.post(`⚠️ Fitbit konnte nicht geladen werden: ${details}`)
         }
     }
 }

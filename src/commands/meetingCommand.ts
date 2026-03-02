@@ -22,12 +22,12 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
                         Actions([
                             Button({
                                 id: "command:meetings:login",
-                                label: "Login",
+                                label: "🔗 Login",
                                 value: "meetings login"
                             }),
                             Button({
                                 id: "command:meetings:summary",
-                                label: "Summary",
+                                label: "🗒️ Summary",
                                 value: "meetings summary"
                             })
                         ])
@@ -54,13 +54,13 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
 
             } catch (error) {
                 const details = error instanceof Error ? error.message : String(error)
-                await ctx.thread.post(`Google Login konnte nicht gestartet werden: ${details}`)
+                await ctx.thread.post(`⚠️ Google Login konnte nicht gestartet werden: ${details}`)
             }
             return
         }
 
         if (action !== "summary") {
-            await ctx.thread.post("Unbekannter Meetings-Subcommand.")
+            await ctx.thread.post("⚠️ Unbekannter Meetings-Subcommand.")
             return
         }
 
@@ -75,7 +75,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
                         children: [
                             CardText("Bitte verbinde zuerst Google Calendar:"),
                             Actions([
-                                LinkButton({ url: error.authorizationUrl, label: "Login here" })
+                                LinkButton({ url: error.authorizationUrl, label: "Login" })
                             ])
                         ]
                     })
@@ -84,7 +84,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
             }
 
             const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`Meetings konnten nicht geladen werden: ${details}`)
+            await ctx.thread.post(`⚠️ Meetings konnten nicht geladen werden: ${details}`)
         }
     }
 }
