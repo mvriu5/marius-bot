@@ -1,9 +1,12 @@
 import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
+import { postAgentReply } from "../agent/reply.js"
+import { isAgentSessionActive } from "../agent/session.js"
 import { rememberBriefingTarget } from "../lib/briefing.js"
 import { trackMessage } from "../lib/messageHistory.js"
 import { state } from "../types/state.js"
 import { COMMANDS, CommandContext, getCommand, isValidCommand } from "./registry.js"
+import { parseActionToCommand } from "../lib/utils.js"
 
 export const bot = new Chat({
     userName: process.env.TELEGRAM_BOT_USERNAME!,
@@ -13,40 +16,21 @@ export const bot = new Chat({
     }
 })
 
-bot.onNewMention(async (thread) => {
-    await thread.subscribe()
-    await thread.post("Subscribed to thread for commands. Mention me with a command. /help for more info.")
-})
-
 const helpActionIds = Array.from(COMMANDS.values()).map((cmd) => `help:${cmd.name}`)
 const meetingActionIds = ["command:meetings:login", "command:meetings:summary"]
 const fitbitActionIds = ["command:fitbit:login", "command:fitbit:summary"]
 const githubActionIds = ["command:github:login", "command:github:commits", "command:github:issues", "command:github:prs"]
 const agentActionIds = ["agent:choice"]
-
 const actionIds = [...helpActionIds, ...meetingActionIds, ...fitbitActionIds, ...githubActionIds, ...agentActionIds]
 
-function parseActionToCommand(actionId: string, value?: string): { command: string; args: string[] } {
-    const valueParts = (value ?? "").trim().split(/\s+/).filter(Boolean)
-    if (valueParts.length > 0) {
-        const [command, ...args] = valueParts
-        return { command: command.toLowerCase(), args: args.map((arg) => arg.toLowerCase()) }
-    }
-
-    if (actionId.startsWith("help:")) {
-        return { command: actionId.replace(/^help:/, "").toLowerCase(), args: [] }
-    }
-
-    if (actionId.startsWith("command:")) {
-        const [, command = "", ...args] = actionId.split(":")
-        return { command: command.toLowerCase(), args: args.map((arg) => arg.toLowerCase()) }
-    }
-
-    return { command: "", args: [] }
-}
+bot.onNewMention(async (thread) => {
+    await thread.subscribe()
+    await thread.post("Subscribed to thread for commands. Mention me with a command. /help for more info.")
+})
 
 bot.onAction(actionIds, async (event) => {
     const { command, args } = parseActionToCommand(event.actionId, event.value)
+
     if (!isValidCommand(command)) {
         await event.thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
         return
@@ -70,8 +54,20 @@ bot.onAction(actionIds, async (event) => {
 bot.onSubscribedMessage(async (thread, message) => {
     await trackMessage(thread.id, message.id)
 
-    const cmdToken = message.text.trim().split(/\s+/)[0].toLowerCase()
-    if (!cmdToken.startsWith("/")) return
+    if (message.author.isMe) return
+
+    const trimmedText = message.text.trim()
+    if (!trimmedText) return
+
+    const cmdToken = trimmedText.split(/\s+/)[0].toLowerCase()
+    if (!cmdToken.startsWith("/")) {
+        const agentSessionActive = await isAgentSessionActive(thread.id, message.author.userId)
+        if (!agentSessionActive) return
+
+        await rememberBriefingTarget(message.author.userId, thread.id)
+        await postAgentReply(thread, trimmedText)
+        return
+    }
 
     const command = cmdToken.replace(/^\/+/, "")
     if (!isValidCommand(command)) {
@@ -83,7 +79,7 @@ bot.onSubscribedMessage(async (thread, message) => {
         thread,
         message,
         command,
-        args: message.text.trim().split(/\s+/).slice(1)
+        args: trimmedText.split(/\s+/).slice(1)
     }
 
     await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
