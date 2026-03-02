@@ -2,6 +2,7 @@ import { Card, CardText } from "chat"
 import { ButtonGrid } from "../components/buttonGrid.js"
 import { COMMANDS } from "../server/registry.js"
 import { Command, type CommandDefinition } from "../types/command.js"
+import { capitalizeFirstLetter } from "../lib/utils.js"
 
 const COMMAND_SUBCOMMANDS: Partial<Record<string, readonly string[]>> = {
     agent: ["<frage>"],
@@ -32,10 +33,9 @@ const helpCommand: CommandDefinition<"help"> = {
                     ...ButtonGrid({
                         buttons: Array.from(COMMANDS.values()).map((cmd) => ({
                             id: `help:${cmd.name}`,
-                            label: `/${cmd.name}`,
+                            label: capitalizeFirstLetter(cmd.name),
                             value: cmd.name
-                        })),
-                        columns: 2
+                        }))
                     }),
                     ...(subcommandLines.length > 0
                         ? [

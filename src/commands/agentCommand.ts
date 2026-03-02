@@ -1,7 +1,7 @@
-import { Card, CardText } from "chat"
+import { Actions, Button, Card, CardText } from "chat"
 import type { ModelMessage } from "ai"
 import { Command, type CommandDefinition } from "../types/command.js"
-import { askAgent } from "../lib/agent.js"
+import { askAgent, extractTwoChoices } from "../lib/agent.js"
 
 const agentCommand: CommandDefinition<"agent"> = {
     name: "agent",
@@ -28,9 +28,27 @@ const agentCommand: CommandDefinition<"agent"> = {
                 }))
 
             const answer = await askAgent(question, history)
+            const choices = extractTwoChoices(answer)
+
             await ctx.thread.post(
                 Card({
-                    children: [CardText(answer)]
+                    children: [
+                        CardText(answer),
+                        ...(choices ? [
+                            Actions([
+                                Button({
+                                    id: "agent:choice",
+                                    label: choices[0].label,
+                                    value: choices[0].value
+                                }),
+                                Button({
+                                    id: "agent:choice",
+                                    label: choices[1].label,
+                                    value: choices[1].value
+                                })
+                            ])]
+                        : [])
+                    ]
                 })
             )
         } catch (error) {
