@@ -24,15 +24,14 @@ const analyticsCommand: CommandDefinition<"analytics"> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `Website Analytics (letzte 24h, ${summary.sites.length} Site(s))`,
+                    title: `Website Analytics (letzte 24h)`,
                     children: [
-                        CardText(`Zeitraum: ${summary.windowStartIso} bis ${summary.windowEndIso}`),
                         ...summary.sites.flatMap((site, index) => [
-                            CardText(`Site: ${site.label} (${site.siteId})`),
-                            CardText(`Visitors: ${site.metrics.visitors}`),
-                            CardText(`Pageviews: ${site.metrics.pageviews}`),
-                            CardText(`Bounce Rate: ${formatPercent(site.metrics.bounceRatePct)}`),
-                            CardText(`Visit Duration: ${formatSeconds(site.metrics.visitDurationSec)}`),
+                            CardText(`🏷️ Site: ${site.label} (${site.siteId})`),
+                            CardText(`👤 Visitors: ${site.metrics.visitors}`),
+                            CardText(`📈 Pageviews: ${site.metrics.pageviews}`),
+                            CardText(`📉 Bounce Rate: ${formatPercent(site.metrics.bounceRatePct)}`),
+                            CardText(`🕓 Visit Duration: ${formatSeconds(site.metrics.visitDurationSec)}`),
                             ...(index < summary.sites.length - 1 ? [Divider()] : [])
                         ]),
                         ...(summary.errors.length > 0

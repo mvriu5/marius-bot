@@ -26,15 +26,6 @@ type PlausibleSiteConfig = {
 const DEFAULT_BASE_URL = "https://plausible.io"
 const PLAUSIBLE_DEBUG = process.env.PLAUSIBLE_DEBUG === "1" || process.env.PLAUSIBLE_DEBUG === "true"
 
-function debugLog(message: string, details?: Record<string, unknown>) {
-    if (!PLAUSIBLE_DEBUG) return
-    if (details) {
-        console.log("[plausible]", message, details)
-        return
-    }
-    console.log("[plausible]", message)
-}
-
 function toNumber(value: unknown): number | null {
     if (typeof value === "number" && Number.isFinite(value)) return value
     if (typeof value === "string" && value.trim()) {
@@ -57,11 +48,6 @@ function requirePlausibleConfig() {
     if (rawSiteIds.length === 0) {
         throw new Error("Missing PLAUSIBLE_SITE_IDS or PLAUSIBLE_SITE_ID")
     }
-    debugLog("Raw site config loaded", {
-        rawSiteIds,
-        hasApiKey: Boolean(apiKey),
-        apiKeyLength: apiKey.length
-    })
 
     const seenSiteIds = new Set<string>()
     const sites: PlausibleSiteConfig[] = []
@@ -82,7 +68,6 @@ function requirePlausibleConfig() {
     }
 
     const baseUrl = (process.env.PLAUSIBLE_API_BASE_URL ?? DEFAULT_BASE_URL).trim().replace(/\/+$/, "")
-    debugLog("Normalized Plausible config", { baseUrl, sites })
     return { apiKey, sites, baseUrl }
 }
 
@@ -140,7 +125,6 @@ async function fetchV2Aggregate(
     windowStartIso: string,
     windowEndIso: string
 ) {
-    debugLog("Calling Plausible v2", { baseUrl, siteId, windowStartIso, windowEndIso })
     const response = await fetch(`${baseUrl}/api/v2/query`, {
         method: "POST",
         headers: {
@@ -156,11 +140,9 @@ async function fetchV2Aggregate(
 
     if (!response.ok) {
         const details = await response.text()
-        debugLog("Plausible v2 failed", { siteId, status: response.status, details })
         throw new Error(`Plausible v2 error (${response.status}): ${details}`)
     }
 
-    debugLog("Plausible v2 success", { siteId, status: response.status })
     return parseV2Aggregate(await response.json())
 }
 
@@ -175,7 +157,6 @@ async function fetchV1Aggregate(baseUrl: string, apiKey: string, siteId: string,
         metrics: "visitors,pageviews,bounce_rate,visit_duration"
     })
 
-    debugLog("Calling Plausible v1", { baseUrl, siteId, startDate, endDate, query: params.toString() })
     const response = await fetch(`${baseUrl}/api/v1/stats/aggregate?${params.toString()}`, {
         headers: {
             Authorization: `Bearer ${apiKey}`
@@ -184,11 +165,9 @@ async function fetchV1Aggregate(baseUrl: string, apiKey: string, siteId: string,
 
     if (!response.ok) {
         const details = await response.text()
-        debugLog("Plausible v1 failed", { siteId, status: response.status, details })
         throw new Error(`Plausible v1 error (${response.status}): ${details}`)
     }
 
-    debugLog("Plausible v1 success", { siteId, status: response.status })
     return parseV1Aggregate(await response.json())
 }
 
@@ -226,7 +205,6 @@ export async function getPlausibleLast24HoursAnalytics(siteQuery?: string): Prom
     const selectedSites = query
         ? sites.filter((site) => site.siteId.toLowerCase().includes(query) || site.label.toLowerCase().includes(query))
         : sites
-    debugLog("Site selection", { query: siteQuery ?? null, selectedSites })
 
     if (selectedSites.length === 0) {
         throw new Error(`No Plausible site matched query: ${siteQuery}`)
@@ -245,7 +223,6 @@ export async function getPlausibleLast24HoursAnalytics(siteQuery?: string): Prom
         } else {
             const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
             errors.push(reason)
-            debugLog("Site analytics failed", { reason })
         }
     }
 

@@ -114,6 +114,14 @@ export async function runDailyBriefing() {
         }
 
         try {
+            const ok = await runBriefingCommand(thread, message, "analytics", [])
+            if (ok) executed += 1
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            await thread.post(`Daily briefing Fehler bei /analytics: ${details}`)
+        }
+
+        try {
             const ok = await runBriefingCommand(thread, message, "meetings", ["summary"])
             if (ok) executed += 1
         } catch (error) {
