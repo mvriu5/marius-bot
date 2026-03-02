@@ -15,8 +15,7 @@ type NewsSummary = {
 const RSS_SOURCES: Array<{ category: NewsCategory; url: string }> = [
     { category: "Politik", url: "https://feeds.bbci.co.uk/news/politics/rss.xml" },
     { category: "Welt", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
-    { category: "AI/Tech", url: "https://feeds.bbci.co.uk/news/technology/rss.xml" },
-    { category: "AI/Tech", url: "https://news.google.com/rss/search?q=artificial+intelligence+when:1d&hl=en-US&gl=US&ceid=US:en" }
+    { category: "AI/Tech", url: "https://feeds.bbci.co.uk/news/technology/rss.xml" }
 ]
 
 function decodeXml(value: string) {
@@ -72,8 +71,43 @@ function dedupeByTitle(items: NewsItem[]) {
     return deduped
 }
 
-export async function getTodayNews(limit = 8): Promise<NewsSummary> {
-    const clampedLimit = Math.max(5, Math.min(10, limit))
+function selectBalanced(items: NewsItem[], limit: number): NewsItem[] {
+    const byCategory = new Map<NewsCategory, NewsItem[]>()
+
+    for (const item of items) {
+        const bucket = byCategory.get(item.category) ?? []
+        bucket.push(item)
+        byCategory.set(item.category, bucket)
+    }
+
+    for (const bucket of byCategory.values()) {
+        bucket.sort((a, b) => b.publishedAt - a.publishedAt)
+    }
+
+    const categories = [...byCategory.keys()]
+    const selected: NewsItem[] = []
+    const indices = new Map(categories.map((c) => [c, 0]))
+
+    while (selected.length < limit) {
+        let added = false
+        for (const category of categories) {
+            if (selected.length >= limit) break
+            const bucket = byCategory.get(category)!
+            const idx = indices.get(category)!
+            if (idx < bucket.length) {
+                selected.push(bucket[idx])
+                indices.set(category, idx + 1)
+                added = true
+            }
+        }
+        if (!added) break
+    }
+
+    return selected
+}
+
+export async function getTodayNews(limit = 5): Promise<NewsSummary> {
+    const clampedLimit = Math.max(1, Math.min(5, limit))
 
     const results = await Promise.allSettled(
         RSS_SOURCES.map(async (source) => {
@@ -97,9 +131,8 @@ export async function getTodayNews(limit = 8): Promise<NewsSummary> {
         }
     }
 
-    const topItems = dedupeByTitle(allItems)
-        .sort((a, b) => b.publishedAt - a.publishedAt)
-        .slice(0, clampedLimit)
+    const dedupedItems = dedupeByTitle(allItems)
+    const topItems = selectBalanced(dedupedItems, clampedLimit)
 
     if (topItems.length === 0) {
         throw new Error(`Keine News gefunden${errors.length ? ` (${errors.join("; ")})` : ""}`)
