@@ -3,7 +3,7 @@ import { stepCountIs, ToolLoopAgent } from "ai"
 
 export async function askAgent(question: string) {
     const agent = new ToolLoopAgent({
-        model: openai("gpt-5.2"),
+        model: openai("gpt-5-mini"),
         stopWhen: stepCountIs(20),
         instructions: "Du bist ein hilfreicher Assistent. Antworte klar und knapp auf Deutsch.",
         tools: {}
