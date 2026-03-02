@@ -1,3 +1,4 @@
+import { Actions, Card, CardText, LinkButton, Text } from "chat"
 import {
     GoogleAuthorizationRequiredError,
     createGoogleAuthorizationUrl,
@@ -25,6 +26,19 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
             try {
                 const authorizationUrl = await createGoogleAuthorizationUrl(ctx.message.author.userId)
                 await ctx.thread.post(`Bitte verbinde Google Calendar hier: ${authorizationUrl}`)
+
+                await ctx.thread.post(
+                    Card({
+                        title: "Google Login",
+                        children: [
+                            CardText("Bitte verbinde Google Calendar hier:"),
+                            Actions([
+                                LinkButton({ url: authorizationUrl, label: "Login here" })
+                            ])
+                        ]
+                    })
+                )
+
             } catch (error) {
                 const details = error instanceof Error ? error.message : String(error)
                 await ctx.thread.post(`Google Login konnte nicht gestartet werden: ${details}`)
