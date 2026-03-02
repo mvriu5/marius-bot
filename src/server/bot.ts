@@ -2,7 +2,7 @@ import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
 import { rememberBriefingTarget } from "../lib/briefing.js"
 import { state } from "../types/state.js"
-import { CommandContext, getCommand, isValidCommand } from "./registry.js"
+import { COMMANDS, CommandContext, getCommand, isValidCommand } from "./registry.js"
 
 export const bot = new Chat({
     userName: process.env.TELEGRAM_BOT_USERNAME!,
@@ -17,13 +17,57 @@ bot.onNewMention(async (thread) => {
     await thread.post("Subscribed to thread for commands. Mention me with a command. /help for more info.")
 })
 
+const helpActionIds = Array.from(COMMANDS.values()).map((cmd) => `help:${cmd.name}`)
+const meetingActionIds = ["command:meetings:login", "command:meetings:summary"]
+
+function parseActionToCommand(actionId: string, value?: string): { command: string; args: string[] } {
+    const valueParts = (value ?? "").trim().split(/\s+/).filter(Boolean)
+    if (valueParts.length > 0) {
+        const [command, ...args] = valueParts
+        return { command: command.toLowerCase(), args: args.map((arg) => arg.toLowerCase()) }
+    }
+
+    if (actionId.startsWith("help:")) {
+        return { command: actionId.replace(/^help:/, "").toLowerCase(), args: [] }
+    }
+
+    if (actionId.startsWith("command:")) {
+        const [, command = "", ...args] = actionId.split(":")
+        return { command: command.toLowerCase(), args: args.map((arg) => arg.toLowerCase()) }
+    }
+
+    return { command: "", args: [] }
+}
+
+bot.onAction([...helpActionIds, ...meetingActionIds], async (event) => {
+    const { command, args } = parseActionToCommand(event.actionId, event.value)
+    if (!isValidCommand(command)) {
+        await event.thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
+        return
+    }
+
+    const syntheticText = `/${[command, ...args].join(" ")}`
+    const ctx: CommandContext = {
+        thread: event.thread as CommandContext["thread"],
+        message: {
+            author: event.user,
+            text: syntheticText
+        } as CommandContext["message"],
+        command,
+        args
+    }
+
+    await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
+    await getCommand(ctx.command)?.execute(ctx)
+})
+
 bot.onSubscribedMessage(async (thread, message) => {
     const cmdToken = message.text.trim().split(/\s+/)[0].toLowerCase()
     if (!cmdToken.startsWith("/")) return
 
     const command = cmdToken.replace(/^\/+/, "")
     if (!isValidCommand(command)) {
-        await thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
+        await thread.post(`Unbekannter Befehl: ${command}. /help fuer eine Liste der verfuegbaren Befehle.`)
         return
     }
 

@@ -1,4 +1,4 @@
-import { Actions, Card, CardText, LinkButton, Text } from "chat"
+import { Actions, Button, Card, CardText, LinkButton } from "chat"
 import {
     GoogleAuthorizationRequiredError,
     createGoogleAuthorizationUrl,
@@ -15,9 +15,24 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
         const action = ctx.args[0]
         if (!action) {
             await ctx.thread.post(
-                "Meetings Subcommands:\n" +
-                "- /meetings login\n" +
-                "- /meetings summary"
+                Card({
+                    title: "Meetings",
+                    children: [
+                        CardText("Wähle einen Subcommand:"),
+                        Actions([
+                            Button({
+                                id: "command:meetings:login",
+                                label: "/meetings login",
+                                value: "meetings login"
+                            }),
+                            Button({
+                                id: "command:meetings:summary",
+                                label: "/meetings summary",
+                                value: "meetings summary"
+                            })
+                        ])
+                    ]
+                })
             )
             return
         }
@@ -25,8 +40,6 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
         if (action === "login") {
             try {
                 const authorizationUrl = await createGoogleAuthorizationUrl(ctx.message.author.userId)
-                await ctx.thread.post(`Bitte verbinde Google Calendar hier: ${authorizationUrl}`)
-
                 await ctx.thread.post(
                     Card({
                         title: "Google Login",
@@ -47,7 +60,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
         }
 
         if (action !== "summary") {
-            await ctx.thread.post("Unbekannter Meetings-Subcommand. Erlaubt: login, summary")
+            await ctx.thread.post("Unbekannter Meetings-Subcommand.")
             return
         }
 
@@ -56,7 +69,17 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
             await ctx.thread.post(summary)
         } catch (error) {
             if (error instanceof GoogleAuthorizationRequiredError) {
-                await ctx.thread.post(`Bitte verbinde zuerst Google Calendar: ${error.authorizationUrl}`)
+                await ctx.thread.post(
+                    Card({
+                        title: "Google Login",
+                        children: [
+                            CardText("Bitte verbinde zuerst Google Calendar:"),
+                            Actions([
+                                LinkButton({ url: error.authorizationUrl, label: "Login here" })
+                            ])
+                        ]
+                    })
+                )
                 return
             }
 
