@@ -17,7 +17,7 @@ const newsCommand: CommandDefinition<"news"> = {
                         ...(titleLines.map((line) =>
                             CardText(line),
                             Divider
-                        ),
+                        )),
                         Actions(
                             summary.items.map((item, index) =>
                                 LinkButton({
@@ -26,7 +26,7 @@ const newsCommand: CommandDefinition<"news"> = {
                                 })
                             )
                         ),
-                        summary.errors.length > 0
+                        ...(summary.errors.length > 0
                             ? [CardText(`Hinweis: ${summary.errors.length} Feed(s) konnten nicht geladen werden.`)]
                             : [])
                     ]
