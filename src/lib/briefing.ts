@@ -50,17 +50,52 @@ export async function runDailyBriefing() {
     for (const [telegramUserId, threadId] of Object.entries(targets)) {
         recipients += 1
 
+        const adapter = bot.getAdapter("telegram")
+
         const thread = {
             id: threadId,
-            post: async (message: unknown) => {
-                await bot.getAdapter("telegram").postMessage(threadId, message as never)
-            }
+            post: async (msg: unknown) => {
+                await adapter.postMessage(threadId, msg as never)
+            },
+            allMessages: {
+                [Symbol.asyncIterator]() {
+                    async function* gen() {
+                        let cursor: string | undefined
+                        while (true) {
+                            const result = await adapter.fetchMessages(threadId, { direction: "forward", cursor })
+                            for (const msg of result.messages) {
+                                yield msg
+                            }
+                            if (!result.nextCursor) break
+                            cursor = result.nextCursor
+                        }
+                    }
+                    return gen()
+                }
+            },
+            createSentMessageFromMessage: (msg: Message<unknown>) => ({
+                ...msg,
+                delete: async () => {
+                    await adapter.deleteMessage(threadId, msg.id)
+                },
+                addReaction: async () => {},
+                edit: async () => ({ ...msg }),
+                removeReaction: async () => {}
+            })
         } as unknown as Thread<Record<string, unknown>, unknown>
 
         const message = {
             text: "---DAILY-BRIEFING---",
             author: { userId: telegramUserId }
         } as unknown as Message<unknown>
+
+        try {
+            const ok = await runBriefingCommand(thread, message, "clear", [])
+            if (ok) executed += 1
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            await thread.post(`Daily briefing Fehler bei /clear: ${details}`)
+        }
 
         try {
             const ok = await runBriefingCommand(thread, message, "fitbit", ["summary"])
