@@ -54,6 +54,15 @@ type StoredOAuthState = {
     telegramUserId: string
 }
 
+export type FitbitDailySummary = {
+    sleepScore: number | null
+    totalMinutesAsleep: number
+    totalTimeInBed: number
+    hrvDailyRmssd: number | null
+    hrvDeepRmssd: number | null
+    lowestHeartRate: number | null
+}
+
 export class FitbitAuthorizationRequiredError extends Error {
     authorizationUrl: string
 
@@ -236,7 +245,7 @@ async function fetchFitbitJson<T>(accessToken: string, path: string): Promise<T>
     return response.json() as Promise<T>
 }
 
-export async function getFitbitDailySummaryMessage(telegramUserId: string) {
+export async function getFitbitDailySummaryMessage(telegramUserId: string): Promise<FitbitDailySummary> {
     const validToken = await getValidAccessTokenForUser(telegramUserId)
     const userIdForApi = validToken.fitbitUserId
     const date = getTodayDateString()
@@ -264,13 +273,12 @@ export async function getFitbitDailySummaryMessage(telegramUserId: string) {
     const heartRates = heartIntraday["activities-heart-intraday"]?.dataset?.map((entry) => entry.value) ?? []
     const lowestHeartRate = heartRates.length > 0 ? Math.min(...heartRates) : null
 
-    const lines = [
-        "Fitbit Tages+bersicht:",
-        `- Sleep Score: ${sleepScore ?? "n/a"}`,
-        `- Schlaf: ${formatMinutes(sleepSummary.totalMinutesAsleep)} (im Bett: ${formatMinutes(sleepSummary.totalTimeInBed)})`,
-        `- HRV (daily RMSSD): ${hrvValue?.dailyRmssd ?? "n/a"} ms`,
-        `- HRV (deep RMSSD): ${hrvValue?.deepRmssd ?? "n/a"} ms`,
-        `- Tiefste Herzfrequenz: ${lowestHeartRate ?? "n/a"} bpm`
-    ]
-    return lines.join("\n")
+    return {
+        sleepScore,
+        totalMinutesAsleep: sleepSummary.totalMinutesAsleep ?? 0,
+        totalTimeInBed: sleepSummary.totalTimeInBed ?? 0,
+        hrvDailyRmssd: hrvValue?.dailyRmssd ?? null,
+        hrvDeepRmssd: hrvValue?.deepRmssd ?? null,
+        lowestHeartRate
+    }
 }

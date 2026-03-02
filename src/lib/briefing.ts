@@ -50,7 +50,23 @@ export async function runDailyBriefing() {
 
         try {
             const fitbitSummary = await getFitbitDailySummaryMessage(message.author.userId)
-            await thread.post(fitbitSummary)
+            const formatMinutes = (totalMinutes: number) => {
+                if (!totalMinutes || totalMinutes <= 0) return "0m"
+                const hours = Math.floor(totalMinutes / 60)
+                const minutes = totalMinutes % 60
+                if (hours === 0) return `${minutes}m`
+                return `${hours}h ${minutes}m`
+            }
+
+            const lines = [
+                "Fitbit Tagesuebersicht:",
+                `- Sleep Score: ${fitbitSummary.sleepScore ?? "n/a"}`,
+                `- Schlaf: ${formatMinutes(fitbitSummary.totalMinutesAsleep)} (im Bett: ${formatMinutes(fitbitSummary.totalTimeInBed)})`,
+                `- HRV (daily RMSSD): ${fitbitSummary.hrvDailyRmssd ?? "n/a"} ms`,
+                `- HRV (deep RMSSD): ${fitbitSummary.hrvDeepRmssd ?? "n/a"} ms`,
+                `- Tiefste Herzfrequenz: ${fitbitSummary.lowestHeartRate ?? "n/a"} bpm`
+            ]
+            await thread.post(lines.join("\n"))
             executed += 1
         } catch (error) {
             if (error instanceof FitbitAuthorizationRequiredError) {

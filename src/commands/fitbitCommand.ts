@@ -65,7 +65,25 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
 
         try {
             const summary = await getFitbitDailySummaryMessage(ctx.message.author.userId)
-            await ctx.thread.post(summary)
+            const formatMinutes = (totalMinutes: number) => {
+                if (!totalMinutes || totalMinutes <= 0) return "0m"
+                const hours = Math.floor(totalMinutes / 60)
+                const minutes = totalMinutes % 60
+                if (hours === 0) return `${minutes}m`
+                return `${hours}h ${minutes}m`
+            }
+
+            await ctx.thread.post(
+                Card({
+                    title: "Fitbit Tagesübersicht",
+                    children: [
+                        CardText(`💤 Sleep Score: ${summary.sleepScore ?? "n/a"}`),
+                        CardText(`🕑 Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
+                        CardText(`💓 HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
+                        CardText(`📉 Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)
+                    ]
+                })
+            )
         } catch (error) {
             if (error instanceof FitbitAuthorizationRequiredError) {
                 await ctx.thread.post(

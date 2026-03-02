@@ -1,4 +1,4 @@
-import { Actions, Card, CardLink, CardText, LinkButton } from "chat"
+import { Actions, Card, CardLink, CardText, link, LinkButton, root, stringifyMarkdown, text } from "chat"
 import { getNewsSummaryMessage } from "../lib/news.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -13,8 +13,13 @@ const newsCommand: CommandDefinition<"news"> = {
                 Card({
                     title: `🗞️ News (${summary.items.length} Meldungen)`,
                     children: [
-                        ...summary.items.map((item, index) =>
-                            CardLink({ url: item.link, label: `${index + 1}. [${item.category}] ${item.title}` })
+                        ...summary.items.map((item, index) => {
+                            const ast = root([
+                                link(item.link, [text(`${index + 1}. [${item.category}] ${item.title}`)])
+                            ])
+
+                            return CardText(stringifyMarkdown(ast))
+                        }
                         ),
                         ...(summary.errors.length > 0
                             ? [CardText(`⚠️ Hinweis: ${summary.errors.length} Feed(s) konnten nicht geladen werden.`)]
