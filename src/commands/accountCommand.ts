@@ -1,5 +1,6 @@
 import { Actions, Button, Card, CardText } from "chat"
 import { isFitbitConnected } from "../lib/fitbit.js"
+import { isGithubConnected } from "../lib/github.js"
 import { isGoogleCalendarConnected } from "../lib/googleCalendar.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -9,19 +10,22 @@ const accountCommand: CommandDefinition<"account"> = {
     execute: async (ctx) => {
         try {
             const userId = ctx.message.author.userId
-            const [fitbitConnected, googleConnected] = await Promise.all([
+            const [fitbitConnected, googleConnected, githubConnected] = await Promise.all([
                 isFitbitConnected(userId),
-                isGoogleCalendarConnected(userId)
+                isGoogleCalendarConnected(userId),
+                isGithubConnected(userId)
             ])
 
             const statusLines = [
                 `Fitbit: ${fitbitConnected ? "✅" : "🚫"}`,
-                `Google Calendar: ${googleConnected ? "✅" : "🚫"}`
+                `Google Calendar: ${googleConnected ? "✅" : "🚫"}`,
+                `Github: ${githubConnected ? "✅" : "🚫"}`
             ]
 
             const loginButtons = [
-                !fitbitConnected && Button({ id: "command:fitbit:login", label: "Fitbit verbinden", value: "fitbit login" }),
-                !googleConnected && Button({ id: "command:meetings:login", label: "Google verbinden", value: "meetings login" })
+                !fitbitConnected && Button({ id: "command:fitbit:login", label: "Connect Fitbit", value: "fitbit login" }),
+                !googleConnected && Button({ id: "command:meetings:login", label: "Connect Google", value: "meetings login" }),
+                !githubConnected && Button({ id: "command:github:login", label: "Connect GitHub", value: "github login" })
             ]
             const availableLoginButtons = loginButtons.filter((button): button is Exclude<typeof button, false> => Boolean(button))
 

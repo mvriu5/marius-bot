@@ -20,8 +20,9 @@ bot.onNewMention(async (thread) => {
 const helpActionIds = Array.from(COMMANDS.values()).map((cmd) => `help:${cmd.name}`)
 const meetingActionIds = ["command:meetings:login", "command:meetings:summary"]
 const fitbitActionIds = ["command:fitbit:login", "command:fitbit:summary"]
+const githubActionIds = ["command:github:login", "command:github:commits", "command:github:issues", "command:github:prs"]
 
-const actionIds = [...helpActionIds, ...meetingActionIds, ...fitbitActionIds]
+const actionIds = [...helpActionIds, ...meetingActionIds, ...fitbitActionIds, ...githubActionIds]
 
 function parseActionToCommand(actionId: string, value?: string): { command: string; args: string[] } {
     const valueParts = (value ?? "").trim().split(/\s+/).filter(Boolean)

@@ -4,6 +4,7 @@ import { Command, type CommandDefinition } from "../types/command.js"
 
 const COMMAND_SUBCOMMANDS: Partial<Record<string, readonly string[]>> = {
     fitbit: ["login", "summary"],
+    github: ["login", "commits", "issues", "prs"],
     meetings: ["login", "summary"],
     weather: ["set <location>"]
 }
