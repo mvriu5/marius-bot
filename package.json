@@ -6,8 +6,10 @@
     "knip": "knip"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.37",
     "@chat-adapter/state-redis": "^4.15.0",
     "@chat-adapter/telegram": "^4.15.0",
+    "ai": "^6.0.105",
     "arctic": "^3.7.0",
     "chat": "^4.15.0",
     "hono": "^4.12.3"

@@ -1,5 +1,6 @@
 import { analytics } from "../commands/analyticsCommand.js"
 import { account } from "../commands/accountCommand.js"
+import { agent } from "../commands/agentCommand.js"
 import { clear } from "../commands/clearCommand.js"
 import { fitbit } from "../commands/fitbitCommand.js"
 import { github } from "../commands/githubCommand.js"
@@ -9,7 +10,7 @@ import { news } from "../commands/newsCommand.js"
 import { weather } from "../commands/weatherCommand.js"
 import { type CommandContext as BaseCommandContext } from "../types/command.js"
 
-const commands = [help, clear, fitbit, weather, news, meetings, account, github, analytics] as const
+const commands = [help, clear, fitbit, weather, news, meetings, account, github, analytics, agent] as const
 
 export type CommandName = typeof commands[number]["name"]
 export type CommandContext = BaseCommandContext<CommandName>

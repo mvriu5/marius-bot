@@ -3,6 +3,8 @@ import { COMMANDS } from "../server/registry.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
 const COMMAND_SUBCOMMANDS: Partial<Record<string, readonly string[]>> = {
+    agent: ["<frage>"],
+    analytics: ["<site (optional)>"],
     fitbit: ["login", "summary"],
     github: ["login", "commits", "issues", "prs"],
     meetings: ["login", "summary"],
