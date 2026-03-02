@@ -1,4 +1,4 @@
-import { Actions, Card, CardText, LinkButton } from "chat"
+import { Actions, Card, CardText, Divider, LinkButton } from "chat"
 import { getNewsSummaryMessage } from "../lib/news.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -12,18 +12,21 @@ const newsCommand: CommandDefinition<"news"> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `News (${summary.items.length} Meldungen)`,
+                    title: `🗞️ News (${summary.items.length} Meldungen)`,
                     children: [
-                        CardText(titleLines.join("\n")),
+                        ...(titleLines.map((line) =>
+                            CardText(line),
+                            Divider
+                        ),
                         Actions(
                             summary.items.map((item, index) =>
                                 LinkButton({
-                                    label: `${index + 1}. Link`,
+                                    label: `${index + 1}.`,
                                     url: item.link
                                 })
                             )
                         ),
-                        ...(summary.errors.length > 0
+                        summary.errors.length > 0
                             ? [CardText(`Hinweis: ${summary.errors.length} Feed(s) konnten nicht geladen werden.`)]
                             : [])
                     ]
