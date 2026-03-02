@@ -17,9 +17,6 @@ const clearCommand: CommandDefinition<"clear"> = {
 
         for (const messageId of allIds) {
             try {
-                // For IDs not in cache, spread ctx.message and override the id so that
-                // createSentMessageFromMessage has a valid Message shape. Only message.id
-                // is used by the delete() implementation, so other fields don't matter.
                 const msg = cachedById.get(messageId) ?? ({ ...ctx.message, id: messageId } as Message<unknown>)
                 await ctx.thread.createSentMessageFromMessage(msg).delete()
             } catch {
