@@ -1,4 +1,5 @@
 import { Card, CardText } from "chat"
+import type { ModelMessage } from "ai"
 import { Command, type CommandDefinition } from "../types/command.js"
 import { askAgent } from "../lib/agent.js"
 
@@ -14,7 +15,19 @@ const agentCommand: CommandDefinition<"agent"> = {
 
         try {
             ctx.thread.startTyping()
-            const answer = await askAgent(question)
+
+            await ctx.thread.refresh()
+            const history: ModelMessage[] = ctx.thread.recentMessages
+                .filter((msg) => {
+                    const text = msg.text.trim()
+                    return text && !text.startsWith("/agent")
+                })
+                .map((msg) => ({
+                    role: msg.author.isMe ? "assistant" : "user",
+                    content: msg.text.trim()
+                }))
+
+            const answer = await askAgent(question, history)
             await ctx.thread.post(
                 Card({
                     children: [CardText(answer)]
