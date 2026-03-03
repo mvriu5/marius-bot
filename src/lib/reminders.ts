@@ -180,5 +180,5 @@ export function parseReminderPayload(value: unknown): ReminderPayload {
 export async function deliverReminder(payload: ReminderPayload) {
     const { bot } = await import("../server/bot.js")
     const adapter = bot.getAdapter("telegram")
-    await adapter.postMessage(payload.threadId, `Erinnerung: ${payload.text}` as never)
+    await adapter.postMessage(payload.threadId, `🕑 Erinnerung: ${payload.text}` as never)
 }

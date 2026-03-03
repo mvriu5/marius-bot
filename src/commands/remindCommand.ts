@@ -185,15 +185,7 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
                 timezone
             })
 
-            const formatted = new Intl.DateTimeFormat("de-DE", {
-                timeZone: timezone,
-                dateStyle: "medium",
-                timeStyle: "short"
-            }).format(new Date(reminder.dueAtMs))
-
-            await ctx.thread.post(
-                `Erinnerung gesetzt fuer ${formatted} (${timezone}): ${reminder.text} (QStash ID: ${reminder.qstashMessageId})`
-            )
+            await ctx.thread.post(`🤙 Erinnerung gesetzt!`)
         } catch (error) {
             await postThreadError(ctx.thread, error, "Reminder konnte nicht gesetzt werden")
         }
