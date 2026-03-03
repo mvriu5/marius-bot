@@ -13,7 +13,7 @@ type GithubArgs = [] | [action: "login" | "commits" | "issues" | "prs"]
 
 const githubCommand: CommandDefinition<"github", GithubArgs> = {
     name: "github",
-    argPolicy: { type: "any" },
+    argPolicy: { type: "max", max: 1 },
     execute: async (ctx) => {
         const action = ctx.args[0]
 

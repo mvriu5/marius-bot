@@ -6,7 +6,7 @@ import { capitalizeFirstLetter } from "../lib/utils.js"
 
 const helpCommand: CommandDefinition<"help"> = {
     name: "help",
-    argPolicy: { type: "any" },
+    argPolicy: { type: "none" },
     execute: async (ctx) => {
         const commandLines = COMMAND_ENTRIES.map(({ command }) => {
             const description = COMMAND_METADATA.get(command.name)?.description ?? "Keine Beschreibung."

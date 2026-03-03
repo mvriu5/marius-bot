@@ -11,7 +11,7 @@ type FitbitArgs = [] | [action: "login" | "summary"]
 
 const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
     name: "fitbit",
-    argPolicy: { type: "any" },
+    argPolicy: { type: "max", max: 1 },
     execute: async (ctx) => {
         const action = ctx.args[0]
         if (!action) {

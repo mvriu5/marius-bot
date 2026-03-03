@@ -11,7 +11,7 @@ type MeetingArgs = [] | [action: "login" | "summary"]
 
 const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
     name: "meetings",
-    argPolicy: { type: "any" },
+    argPolicy: { type: "max", max: 1 },
     execute: async (ctx) => {
         const action = ctx.args[0]
         if (!action) {

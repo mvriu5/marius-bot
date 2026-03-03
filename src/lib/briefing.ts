@@ -42,6 +42,16 @@ async function runBriefingCommand(
         return false
     }
 
+    const commandDef = getCommand(command)
+    if (!commandDef) {
+        await thread.post(`Daily briefing Fehler: unbekannter Befehl ${command}`)
+        return false
+    }
+    if (!commandDef.validateArgs(args)) {
+        await thread.post(`Daily briefing Fehler: ungueltige Argumente fuer /${command}`)
+        return false
+    }
+
     const ctx: CommandContext = {
         thread,
         message,
@@ -49,7 +59,7 @@ async function runBriefingCommand(
         args
     }
 
-    await getCommand(command)?.execute(ctx)
+    await commandDef.execute(ctx)
     return true
 }
 

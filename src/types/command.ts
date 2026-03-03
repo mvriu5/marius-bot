@@ -14,6 +14,8 @@ export type CommandArgPolicy<Args extends readonly string[] = readonly string[]>
     | { type: "none" }
     | { type: "any" }
     | { type: "tuple"; length: Args["length"] }
+    | { type: "max"; max: number }
+    | { type: "range"; min: number; max: number }
 
 export type CommandDefinition<
     Name extends string,
@@ -41,7 +43,9 @@ export class Command<
     validateArgs(args: readonly string[]): args is Args {
         if (this.argPolicy.type === "any") return true
         if (this.argPolicy.type === "none") return args.length === 0
-        return args.length === this.argPolicy.length
+        if (this.argPolicy.type === "tuple") return args.length === this.argPolicy.length
+        if (this.argPolicy.type === "max") return args.length <= this.argPolicy.max
+        return args.length >= this.argPolicy.min && args.length <= this.argPolicy.max
     }
 
     async execute(ctx: CommandContext): Promise<void> {

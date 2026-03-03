@@ -5,7 +5,14 @@ import { isAgentSessionActive } from "../agent/session.js"
 import { rememberBriefingTarget } from "../lib/briefing.js"
 import { trackMessage } from "../lib/messageHistory.js"
 import { state } from "../types/state.js"
-import { COMMAND_ACTION_IDS, CommandContext, getCommand, HELP_ACTION_IDS, isValidCommand } from "./registry.js"
+import {
+    COMMAND_ACTION_IDS,
+    COMMAND_METADATA,
+    CommandContext,
+    getCommand,
+    HELP_ACTION_IDS,
+    isValidCommand
+} from "./registry.js"
 import { parseActionToCommand } from "../lib/utils.js"
 
 export const bot = new Chat({
@@ -18,6 +25,22 @@ export const bot = new Chat({
 
 const agentActionIds = ["agent:choice"]
 const actionIds = [...HELP_ACTION_IDS, ...COMMAND_ACTION_IDS, ...agentActionIds]
+
+async function executeCommandWithValidation(ctx: CommandContext) {
+    const commandDef = getCommand(ctx.command)
+    if (!commandDef) return
+
+    if (!commandDef.validateArgs(ctx.args)) {
+        const subcommands = COMMAND_METADATA.get(ctx.command)?.subcommands ?? []
+        const usageHint = subcommands.length > 0
+            ? ` Erlaubt: ${subcommands.join(", ")}`
+            : ""
+        await ctx.thread.post(`Ungültige Argumente für /${ctx.command}.${usageHint}`)
+        return
+    }
+
+    await commandDef.execute(ctx)
+}
 
 bot.onNewMention(async (thread) => {
     await thread.subscribe()
@@ -44,7 +67,7 @@ bot.onAction(actionIds, async (event) => {
     }
 
     await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
-    await getCommand(ctx.command)?.execute(ctx)
+    await executeCommandWithValidation(ctx)
 })
 
 bot.onSubscribedMessage(async (thread, message) => {
@@ -79,5 +102,5 @@ bot.onSubscribedMessage(async (thread, message) => {
     }
 
     await rememberBriefingTarget(ctx.message.author.userId, ctx.thread.id)
-    await getCommand(ctx.command)?.execute(ctx)
+    await executeCommandWithValidation(ctx)
 })
