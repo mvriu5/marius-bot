@@ -45,7 +45,7 @@ export const COMMAND_ENTRIES = [
     {
         command: remind,
         description: "Setzt eine Erinnerung zu einer Uhrzeit.",
-        subcommands: ["HH:MM <text>", "YYYY-MM-DD HH:MM <text>"] as const,
+        subcommands: ["5m|1h|2d <text>", "HH:MM <text>", "YYYY-MM-DD HH:MM <text>"] as const,
         actionIds: [] as const
     },
     {

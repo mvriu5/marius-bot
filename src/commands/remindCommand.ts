@@ -4,6 +4,7 @@ import { Command, type CommandDefinition } from "../types/command.js"
 import { UserError } from "../errors/appError.js"
 
 type RemindParsedArgs = {
+    durationToken?: string
     dateToken?: string
     timeToken: string
     text: string
@@ -21,6 +22,26 @@ function isDateToken(value: string) {
 
 function isTimeToken(value: string) {
     return /^\d{2}:\d{2}$/.test(value)
+}
+
+function isDurationToken(value: string) {
+    return /^\d+(m|h|d)$/i.test(value)
+}
+
+function parseDurationToken(durationToken: string) {
+    const match = durationToken.trim().toLowerCase().match(/^(\d+)(m|h|d)$/)
+    if (!match) {
+        throw new UserError("REMINDER_DURATION_INVALID", "Dauer ist ungültig. Nutze z. B. 5m, 1h oder 2d.")
+    }
+
+    const amount = Number(match[1])
+    const unit = match[2]
+    if (!Number.isInteger(amount) || amount <= 0) {
+        throw new UserError("REMINDER_DURATION_INVALID", "Dauer muss grösser als 0 sein.")
+    }
+
+    const msPerUnit = unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : 86_400_000
+    return amount * msPerUnit
 }
 
 function getReminderTimezone() {
@@ -126,7 +147,20 @@ function addOneDay(parts: DateParts): DateParts {
     }
 }
 
-function parseDueAtMs(dateToken: string | undefined, timeToken: string, timeZone: string) {
+function parseDueAtMs(
+    dateToken: string | undefined,
+    timeToken: string,
+    timeZone: string,
+    durationToken?: string
+) {
+    if (durationToken) {
+        const dueAtMs = Date.now() + parseDurationToken(durationToken)
+        if (dueAtMs <= Date.now()) {
+            throw new UserError("REMINDER_DURATION_INVALID", "Dauer ist ungültig.")
+        }
+        return dueAtMs
+    }
+
     const { hour, minute } = parseTimeToken(timeToken)
     const nowMs = Date.now()
 
@@ -156,7 +190,13 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
     argPolicy: { type: "any" },
     parseArgs: (args) => {
         if (args.length < 2) {
-            return { ok: false, message: "Nutzung: /remind HH:MM <text> oder /remind YYYY-MM-DD HH:MM <text>" }
+            return { ok: false, message: "Nutzung: /remind <5m|1h|2d> <text> oder /remind HH:MM <text> oder /remind YYYY-MM-DD HH:MM <text>" }
+        }
+
+        if (isDurationToken(args[0])) {
+            const text = args.slice(1).join(" ").trim()
+            if (!text) return { ok: false, message: "Bitte gib einen Erinnerungstext an." }
+            return { ok: true, value: { durationToken: args[0], timeToken: "00:00", text } }
         }
 
         if (isTimeToken(args[0])) {
@@ -171,12 +211,17 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
             return { ok: true, value: { dateToken: args[0], timeToken: args[1], text } }
         }
 
-        return { ok: false, message: "Nutzung: /remind HH:MM <text> oder /remind YYYY-MM-DD HH:MM <text>" }
+        return { ok: false, message: "Nutzung: /remind <5m|1h|2d> <text> oder /remind HH:MM <text> oder /remind YYYY-MM-DD HH:MM <text>" }
     },
     execute: async (ctx) => {
         try {
             const timezone = getReminderTimezone()
-            const dueAtMs = parseDueAtMs(ctx.parsedArgs.dateToken, ctx.parsedArgs.timeToken, timezone)
+            const dueAtMs = parseDueAtMs(
+                ctx.parsedArgs.dateToken,
+                ctx.parsedArgs.timeToken,
+                timezone,
+                ctx.parsedArgs.durationToken
+            )
             const reminder = await scheduleReminder({
                 threadId: ctx.thread.id,
                 userId: ctx.message.author.userId,
