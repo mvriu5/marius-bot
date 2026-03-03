@@ -1,11 +1,28 @@
-import { Actions, Button, Card, CardText, type Thread } from "chat"
+import { Actions, Button, Card, CardText, emoji, type Message, type Thread } from "chat"
 import type { ModelMessage } from "ai"
 import { askAgent } from "./agent.js"
 import { extractTwoChoices } from "./choice.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
+type EmojiMap = Record<string, string>
 
-export async function postAgentReply(thread: AgentThread, question: string): Promise<void> {
+function resolveEmojiByName(name: string): string | null {
+    const map = emoji as unknown as EmojiMap
+    return map[name] ?? null
+}
+
+function renderEmojiTokens(input: string): string {
+    return input.replace(/:([a-z0-9_]+):/gi, (full, rawName: string) => {
+        const value = resolveEmojiByName(rawName.toLowerCase())
+        return value ?? full
+    })
+}
+
+export async function postAgentReply(
+    thread: AgentThread,
+    question: string,
+    sourceMessage?: Message<unknown>
+): Promise<void> {
     thread.startTyping()
 
     await thread.refresh()
@@ -20,12 +37,13 @@ export async function postAgentReply(thread: AgentThread, question: string): Pro
         }))
 
     const answer = await askAgent(question, history)
-    const choices = extractTwoChoices(answer)
+    const renderedText = renderEmojiTokens(answer.text)
+    const choices = extractTwoChoices(renderedText)
 
     await thread.post(
         Card({
             children: [
-                CardText(answer),
+                CardText(renderedText),
                 ...(choices
                     ? [
                         Actions([
@@ -45,4 +63,12 @@ export async function postAgentReply(thread: AgentThread, question: string): Pro
             ]
         })
     )
+
+    if (sourceMessage?.id && answer.reactionName) {
+        const reaction = resolveEmojiByName(answer.reactionName)
+        if (reaction) {
+            const userMessage = thread.createSentMessageFromMessage(sourceMessage)
+            await userMessage.addReaction(reaction)
+        }
+    }
 }

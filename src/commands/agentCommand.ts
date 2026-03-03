@@ -23,7 +23,7 @@ const agentCommand: CommandDefinition<"agent", AgentParsedArgs> = {
                 return
             }
 
-            await postAgentReply(ctx.thread, ctx.parsedArgs.question)
+            await postAgentReply(ctx.thread, ctx.parsedArgs.question, ctx.message)
         } catch (error) {
             await postThreadError(ctx.thread, error, "Agent konnte nicht antworten")
         }

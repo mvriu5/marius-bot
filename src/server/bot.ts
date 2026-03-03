@@ -100,7 +100,7 @@ bot.onSubscribedMessage(async (thread, message) => {
 
         try {
             await rememberBriefingTarget(message.author.userId, thread.id)
-            await postAgentReply(thread, trimmedText)
+            await postAgentReply(thread, trimmedText, message)
         } catch (error) {
             await postThreadError(thread, error, "Agent konnte nicht antworten")
         }
