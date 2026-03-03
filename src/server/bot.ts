@@ -2,6 +2,7 @@ import { createTelegramAdapter } from "@chat-adapter/telegram"
 import { Chat } from "chat"
 import { postAgentReply } from "../agent/reply.js"
 import { isAgentSessionActive } from "../agent/session.js"
+import { isAuthorizedTelegramUser } from "../lib/auth.js"
 import { rememberBriefingTarget } from "../lib/briefing.js"
 import { trackMessage } from "../lib/messageHistory.js"
 import { state } from "../types/state.js"
@@ -58,11 +59,20 @@ async function executeCommandWithValidation(ctx: CommandContext) {
 }
 
 bot.onNewMention(async (thread) => {
+    await thread.refresh()
+    const latest = thread.recentMessages.find((msg) => !msg.author.isMe)
+    if (!latest || !isAuthorizedTelegramUser(latest.author.userId)) return
+
     await thread.subscribe()
     await thread.post("Subscribed to thread for commands. Mention me with a command. /help for more info.")
 })
 
 bot.onAction(actionIds, async (event) => {
+    if (!isAuthorizedTelegramUser(event.user.userId)) {
+        await event.thread.post("Nicht autorisiert.")
+        return
+    }
+
     const { command, args } = parseActionToCommand(event.actionId, event.value)
 
     if (!isValidCommand(command)) {
@@ -89,6 +99,10 @@ bot.onSubscribedMessage(async (thread, message) => {
     await trackMessage(thread.id, message.id)
 
     if (message.author.isMe) return
+    if (!isAuthorizedTelegramUser(message.author.userId)) {
+        await thread.post("Nicht autorisiert.")
+        return
+    }
 
     const trimmedText = message.text.trim()
     if (!trimmedText) return

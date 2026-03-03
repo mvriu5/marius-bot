@@ -1,5 +1,6 @@
 import type { Hono } from "hono"
 import { logError, toHttpError } from "../errors/errorOutput.js"
+import { isAuthorizedTelegramUser } from "../lib/auth.js"
 
 type OAuthRouteConfig = {
     providerName: string
@@ -14,6 +15,7 @@ export function registerOAuthRoutes(app: Hono, config: OAuthRouteConfig) {
     app.get(`/api/${basePath}/connect`, async (c) => {
         const userId = c.req.query("telegram_user_id")
         if (!userId) return c.text("Missing telegram_user_id query parameter", 400)
+        if (!isAuthorizedTelegramUser(userId)) return c.text("Unauthorized", 401)
 
         try {
             const url = await createAuthorizationUrl(userId)
