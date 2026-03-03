@@ -31,8 +31,22 @@ function requireReminderConfig() {
         )
     }
 
+    const qstashToken = process.env.QSTASH_TOKEN?.trim()
+    if (!qstashToken) {
+        throw new ProviderError(
+            "qstash",
+            "QSTASH_TOKEN_MISSING",
+            "Reminder-Konfiguration ist unvollstaendig.",
+            500,
+            "Missing QSTASH_TOKEN"
+        )
+    }
+
+    const qstashUrl = process.env.QSTASH_URL?.trim()
     return {
-        callbackUrl: `${honoUrl.replace(/\/+$/, "")}/api/qstash/reminder`
+        callbackUrl: `${honoUrl.replace(/\/+$/, "")}/api/qstash/reminder`,
+        qstashToken,
+        qstashUrl
     }
 }
 
@@ -78,11 +92,14 @@ export async function scheduleReminder(input: ScheduleReminderInput): Promise<Re
         createdAtMs: now
     }
 
-    const { callbackUrl } = requireReminderConfig()
+    const { callbackUrl, qstashToken, qstashUrl } = requireReminderConfig()
     const delaySeconds = Math.ceil((input.dueAtMs - now) / 1000)
 
     try {
-        const client = new Client()
+        const client = new Client({
+            token: qstashToken,
+            ...(qstashUrl ? { baseUrl: qstashUrl } : {})
+        })
         await client.publishJSON({
             url: callbackUrl,
             body: payload,
