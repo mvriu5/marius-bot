@@ -18,7 +18,6 @@ const helpCommand: CommandDefinition<"help", {}> = {
             Card({
                 title: "📢 Verfügbare Befehle",
                 children: [
-                    CardText("Wähle einen Befehl:"),
                     ...ButtonGrid({
                         buttons: COMMAND_ENTRIES.map(({ command }) => ({
                             id: `help:${command.name}`,
@@ -26,7 +25,6 @@ const helpCommand: CommandDefinition<"help", {}> = {
                             value: command.name
                         }))
                     }),
-                    CardText("Befehlsübersicht:"),
                     CardText(commandLines.join("\n")),
                 ]
             })

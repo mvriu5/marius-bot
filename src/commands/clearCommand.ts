@@ -3,6 +3,19 @@ import { Command, type CommandDefinition } from "../types/command.js"
 import { clearMessageHistory, getMessageIds } from "../lib/messageHistory.js"
 import { clearAgentSession } from "../agent/session.js"
 
+const CLEAR_LOOKBACK_LIMIT = Math.max(50, 1000)
+
+function parseCompositeMessageId(value: string) {
+    const match = value.match(/^(-?\d+):(\d+)$/)
+    if (!match) return null
+
+    const chatId = match[1]
+    const messageId = Number(match[2])
+    if (!Number.isInteger(messageId) || messageId <= 0) return null
+
+    return { chatId, messageId }
+}
+
 const clearCommand: CommandDefinition<"clear", {}> = {
     name: "clear",
     argPolicy: { type: "none" },
@@ -28,6 +41,16 @@ const clearCommand: CommandDefinition<"clear", {}> = {
             ...trackedThreadIds,
             ...trackedChannelIds
         ])
+
+        // Telegram doesn't provide full history listing. Sweep a lookback range so
+        // bot/channel messages are still removed even if they weren't cached/tracked.
+        const parsedCurrent = parseCompositeMessageId(ctx.message.id)
+        if (parsedCurrent) {
+            const minMessageId = Math.max(1, parsedCurrent.messageId - CLEAR_LOOKBACK_LIMIT + 1)
+            for (let id = parsedCurrent.messageId; id >= minMessageId; id -= 1) {
+                allIds.add(`${parsedCurrent.chatId}:${id}`)
+            }
+        }
 
         for (const messageId of allIds) {
             try {
