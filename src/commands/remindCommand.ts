@@ -9,6 +9,12 @@ type RemindParsedArgs = {
     text: string
 }
 
+type DateParts = {
+    year: number
+    month: number
+    day: number
+}
+
 function isDateToken(value: string) {
     return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
@@ -17,7 +23,11 @@ function isTimeToken(value: string) {
     return /^\d{2}:\d{2}$/.test(value)
 }
 
-function parseDueAtMs(dateToken: string | undefined, timeToken: string) {
+function getReminderTimezone() {
+    return process.env.REMINDER_TIMEZONE?.trim() || "Europe/Berlin"
+}
+
+function parseTimeToken(timeToken: string) {
     const [hourText, minuteText] = timeToken.split(":")
     const hour = Number(hourText)
     const minute = Number(minuteText)
@@ -26,25 +36,119 @@ function parseDueAtMs(dateToken: string | undefined, timeToken: string) {
         throw new UserError("REMINDER_TIME_INVALID", "Uhrzeit ist ungueltig.")
     }
 
-    const now = new Date()
-    if (!dateToken) {
-        const due = new Date(now)
-        due.setHours(hour, minute, 0, 0)
-        if (due.getTime() <= now.getTime()) due.setDate(due.getDate() + 1)
-        return due.getTime()
-    }
+    return { hour, minute }
+}
 
-    const due = new Date(`${dateToken}T${timeToken}:00`)
+function parseDateToken(dateToken: string): DateParts {
+    const [yearText, monthText, dayText] = dateToken.split("-")
+    const year = Number(yearText)
+    const month = Number(monthText)
+    const day = Number(dayText)
 
-    if (Number.isNaN(due.getTime())) {
+    const probe = new Date(Date.UTC(year, month - 1, day))
+    if (
+        !Number.isInteger(year) ||
+        !Number.isInteger(month) ||
+        !Number.isInteger(day) ||
+        probe.getUTCFullYear() !== year ||
+        probe.getUTCMonth() !== month - 1 ||
+        probe.getUTCDate() !== day
+    ) {
         throw new UserError("REMINDER_DATE_INVALID", "Datum ist ungueltig.")
     }
 
-    if (due.getTime() <= now.getTime()) {
+    return { year, month, day }
+}
+
+function getTimeZoneOffsetMinutes(timeZone: string, instant: Date) {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZoneName: "shortOffset"
+    })
+
+    const zonePart = formatter.formatToParts(instant).find((part) => part.type === "timeZoneName")?.value
+    if (!zonePart || zonePart === "GMT" || zonePart === "UTC") return 0
+
+    const match = zonePart.match(/^(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$/)
+    if (!match) {
+        throw new UserError("REMINDER_TIMEZONE_INVALID", `Zeitzone konnte nicht ausgewertet werden: ${timeZone}`)
+    }
+
+    const sign = match[1] === "-" ? -1 : 1
+    const hours = Number(match[2])
+    const minutes = Number(match[3] ?? "0")
+    return sign * (hours * 60 + minutes)
+}
+
+function zonedDateTimeToUtcMs(parts: DateParts, hour: number, minute: number, timeZone: string) {
+    const targetUtc = Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute, 0, 0)
+
+    let resolved = targetUtc
+    for (let i = 0; i < 3; i += 1) {
+        const offsetMinutes = getTimeZoneOffsetMinutes(timeZone, new Date(resolved))
+        const next = targetUtc - offsetMinutes * 60_000
+        if (next === resolved) break
+        resolved = next
+    }
+
+    return resolved
+}
+
+function getCurrentDatePartsInTimeZone(timeZone: string): DateParts {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    })
+
+    const parts = formatter.formatToParts(new Date())
+    const year = Number(parts.find((part) => part.type === "year")?.value)
+    const month = Number(parts.find((part) => part.type === "month")?.value)
+    const day = Number(parts.find((part) => part.type === "day")?.value)
+
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+        throw new UserError("REMINDER_TIMEZONE_INVALID", `Lokales Datum konnte nicht aus ${timeZone} gelesen werden.`)
+    }
+
+    return { year, month, day }
+}
+
+function addOneDay(parts: DateParts): DateParts {
+    const next = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1))
+    return {
+        year: next.getUTCFullYear(),
+        month: next.getUTCMonth() + 1,
+        day: next.getUTCDate()
+    }
+}
+
+function parseDueAtMs(dateToken: string | undefined, timeToken: string, timeZone: string) {
+    const { hour, minute } = parseTimeToken(timeToken)
+    const nowMs = Date.now()
+
+    if (!dateToken) {
+        const today = getCurrentDatePartsInTimeZone(timeZone)
+        let dueAtMs = zonedDateTimeToUtcMs(today, hour, minute, timeZone)
+
+        if (dueAtMs <= nowMs) {
+            const tomorrow = addOneDay(today)
+            dueAtMs = zonedDateTimeToUtcMs(tomorrow, hour, minute, timeZone)
+        }
+
+        return dueAtMs
+    }
+
+    const dateParts = parseDateToken(dateToken)
+    const dueAtMs = zonedDateTimeToUtcMs(dateParts, hour, minute, timeZone)
+    if (dueAtMs <= nowMs) {
         throw new UserError("REMINDER_TIME_IN_PAST", "Die Erinnerungszeit liegt in der Vergangenheit.")
     }
 
-    return due.getTime()
+    return dueAtMs
 }
 
 const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
@@ -71,22 +175,24 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
     },
     execute: async (ctx) => {
         try {
-            const dueAtMs = parseDueAtMs(ctx.parsedArgs.dateToken, ctx.parsedArgs.timeToken)
+            const timezone = getReminderTimezone()
+            const dueAtMs = parseDueAtMs(ctx.parsedArgs.dateToken, ctx.parsedArgs.timeToken, timezone)
             const reminder = await scheduleReminder({
                 threadId: ctx.thread.id,
                 userId: ctx.message.author.userId,
                 text: ctx.parsedArgs.text,
                 dueAtMs,
-                timezone: "Europe/Berlin"
+                timezone
             })
 
             const formatted = new Intl.DateTimeFormat("de-DE", {
+                timeZone: timezone,
                 dateStyle: "medium",
                 timeStyle: "short"
             }).format(new Date(reminder.dueAtMs))
 
             await ctx.thread.post(
-                `Erinnerung gesetzt fuer ${formatted}: ${reminder.text} (QStash ID: ${reminder.qstashMessageId})`
+                `Erinnerung gesetzt fuer ${formatted} (${timezone}): ${reminder.text} (QStash ID: ${reminder.qstashMessageId})`
             )
         } catch (error) {
             await postThreadError(ctx.thread, error, "Reminder konnte nicht gesetzt werden")
