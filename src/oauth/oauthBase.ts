@@ -9,7 +9,7 @@ export type PkceOAuthState = OAuthState & {
     codeVerifier: string
 }
 
-export type OAuthAction = "code exchange" | "token refresh"
+type OAuthAction = "code exchange" | "token refresh"
 
 type OAuthConfigInput = {
     clientId: string | undefined

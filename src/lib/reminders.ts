@@ -1,8 +1,7 @@
 import { Client, Receiver } from "@upstash/qstash"
 import { AuthError, ProviderError, UserError } from "../errors/appError.js"
-import { bot } from "../server/bot.js"
 
-export type ReminderPayload = {
+type ReminderPayload = {
     reminderId: string
     threadId: string
     userId: string
@@ -154,6 +153,7 @@ export function parseReminderPayload(value: unknown): ReminderPayload {
 }
 
 export async function deliverReminder(payload: ReminderPayload) {
+    const { bot } = await import("../server/bot.js")
     const adapter = bot.getAdapter("telegram")
     await adapter.postMessage(payload.threadId, `Erinnerung: ${payload.text}` as never)
 }

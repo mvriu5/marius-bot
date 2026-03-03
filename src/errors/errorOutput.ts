@@ -19,7 +19,7 @@ function toContentfulStatus(status: number): HttpStatus {
     return 500
 }
 
-export function formatThreadError(error: unknown, context?: string) {
+function formatThreadError(error: unknown, context?: string) {
     const normalized = normalizeError(error)
     const message = context ? `${context}: ${normalized.userMessage}` : normalized.userMessage
 

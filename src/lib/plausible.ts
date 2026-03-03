@@ -5,13 +5,13 @@ type PlausibleMetrics = {
     visitDurationSec: number | null
 }
 
-export type PlausibleSiteAnalytics = {
+type PlausibleSiteAnalytics = {
     siteId: string
     label: string
     metrics: PlausibleMetrics
 }
 
-export type PlausibleAnalyticsSummary = {
+type PlausibleAnalyticsSummary = {
     windowStartIso: string
     windowEndIso: string
     sites: PlausibleSiteAnalytics[]

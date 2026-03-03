@@ -1,4 +1,4 @@
-export type AppErrorKind = "user" | "auth" | "provider"
+type AppErrorKind = "user" | "auth" | "provider"
 
 type AppErrorInput = {
     code: string
@@ -8,7 +8,7 @@ type AppErrorInput = {
     cause?: unknown
 }
 
-export abstract class AppError extends Error {
+abstract class AppError extends Error {
     public readonly kind: AppErrorKind
     public readonly code: string
     public readonly userMessage: string

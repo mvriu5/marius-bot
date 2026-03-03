@@ -1,7 +1,7 @@
 import { ensureStateConnected, state } from "../types/state.js"
 
 const AGENT_SESSION_KEY_PREFIX = "agent-session:"
-export const AGENT_SESSION_DURATION_MS = 10 * 60 * 1000
+const AGENT_SESSION_DURATION_MS = 10 * 60 * 1000
 
 function key(threadId: string, userId: string): string {
     return `${AGENT_SESSION_KEY_PREFIX}${threadId}:${userId}`

@@ -89,13 +89,13 @@ export type CommandName = typeof COMMAND_ENTRIES[number]["command"]["name"]
 export type CommandContext = BaseCommandContext<CommandName>
 type Command = (typeof COMMAND_ENTRIES)[number]["command"]
 
-export type CommandMetadata = {
+type CommandMetadata = {
     description: string
     subcommands: readonly string[]
     actionIds: readonly string[]
 }
 
-export const COMMANDS = new Map<CommandName, Command>(
+const COMMANDS = new Map<CommandName, Command>(
     COMMAND_ENTRIES.map((entry) => [entry.command.name, entry.command] as const)
 )
 
