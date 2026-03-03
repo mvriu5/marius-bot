@@ -7,6 +7,20 @@ import { CommandContext } from "../types/command.js"
 const BRIEFING_TARGETS_KEY = "briefing:targets"
 
 type BriefingTargets = Record<string, string>
+type BriefingStep = {
+    command: string
+    args: string[]
+    label: string
+}
+
+const BRIEFING_STEPS: BriefingStep[] = [
+    { command: "clear", args: [], label: "/clear" },
+    { command: "fitbit", args: ["summary"], label: "/fitbit summary" },
+    { command: "news", args: [], label: "/news" },
+    { command: "analytics", args: [], label: "/analytics" },
+    { command: "meetings", args: ["summary"], label: "/meetings summary" },
+    { command: "weather", args: [], label: "/weather" }
+]
 
 export async function rememberBriefingTarget(telegramUserId: string, threadId: string) {
     await ensureStateConnected()
@@ -37,6 +51,20 @@ async function runBriefingCommand(
 
     await getCommand(command)?.execute(ctx)
     return true
+}
+
+async function runBriefingStep(
+    thread: Thread<Record<string, unknown>, unknown>,
+    message: Message<unknown>,
+    step: BriefingStep
+) {
+    try {
+        return await runBriefingCommand(thread, message, step.command, step.args)
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error)
+        await thread.post(`Daily briefing Fehler bei ${step.label}: ${details}`)
+        return false
+    }
 }
 
 export async function runDailyBriefing() {
@@ -89,52 +117,11 @@ export async function runDailyBriefing() {
             author: { userId: telegramUserId }
         } as unknown as Message<unknown>
 
-        try {
-            const ok = await runBriefingCommand(thread, message, "clear", [])
-            if (ok) executed += 1
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Daily briefing Fehler bei /clear: ${details}`)
-        }
-
-        try {
-            const ok = await runBriefingCommand(thread, message, "fitbit", ["summary"])
-            if (ok) executed += 1
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Daily briefing Fehler bei /fitbit summary: ${details}`)
-        }
-
-        try {
-            const ok = await runBriefingCommand(thread, message, "news", [])
-            if (ok) executed += 1
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Daily briefing Fehler bei /news: ${details}`)
-        }
-
-        try {
-            const ok = await runBriefingCommand(thread, message, "analytics", [])
-            if (ok) executed += 1
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Daily briefing Fehler bei /analytics: ${details}`)
-        }
-
-        try {
-            const ok = await runBriefingCommand(thread, message, "meetings", ["summary"])
-            if (ok) executed += 1
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Daily briefing Fehler bei /meetings summary: ${details}`)
-        }
-
-        try {
-            const ok = await runBriefingCommand(thread, message, "weather", [])
-            if (ok) executed += 1
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await thread.post(`Daily briefing Fehler bei /weather: ${details}`)
+        for (const step of BRIEFING_STEPS) {
+            const ok = await runBriefingStep(thread, message, step)
+            if (ok) {
+                executed += 1
+            }
         }
     }
 

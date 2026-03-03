@@ -1,4 +1,17 @@
-import { ensureStateConnected, state } from "../types/state.js"
+import {
+    OAUTH_STATE_TTL_MS,
+    createTelegramOAuthKeys,
+    deleteStateValue,
+    getStateValue,
+    isTokenValid,
+    setStateValue
+} from "../oauth/oauthState.js"
+import {
+    AuthorizationRequiredError,
+    buildOAuthRedirectUri,
+    type OAuthState,
+    requireOAuthConfig
+} from "../oauth/oauthBase.js"
 
 type FitbitSleepResponse = {
     sleep?: Array<{
@@ -34,23 +47,13 @@ type FitbitTokenResponse = {
     user_id?: string
 }
 
-const fitbitClientId = process.env.FITBIT_CLIENT_ID
-const fitbitClientSecret = process.env.FITBIT_CLIENT_SECRET
-const honoUrl = process.env.HONO_URL
-
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
-const TOKEN_KEY_PREFIX = "fitbit:token:telegram:"
-const OAUTH_STATE_KEY_PREFIX = "fitbit:oauth:state:"
+const keys = createTelegramOAuthKeys("fitbit")
 
 type StoredFitbitToken = {
     accessToken: string
     refreshToken: string
     expiresAt: number
     fitbitUserId?: string
-}
-
-type StoredOAuthState = {
-    telegramUserId: string
 }
 
 type FitbitDailySummary = {
@@ -60,38 +63,24 @@ type FitbitDailySummary = {
     lowestHeartRate: number | null
 }
 
-export class FitbitAuthorizationRequiredError extends Error {
-    authorizationUrl: string
-
+export class FitbitAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
-        super("Fitbit authorization required")
-        this.name = "FitbitAuthorizationRequiredError"
-        this.authorizationUrl = authorizationUrl
+        super("Fitbit", "FitbitAuthorizationRequiredError", authorizationUrl)
     }
 }
 
-function requireOAuthConfig() {
-    if (!fitbitClientId) throw new Error("Missing FITBIT_CLIENT_ID")
-    if (!fitbitClientSecret) throw new Error("Missing FITBIT_CLIENT_SECRET")
-    if (!honoUrl) throw new Error("Missing HONO_URL")
-}
-
-function getFitbitRedirectUri() {
-    requireOAuthConfig()
-    return `${honoUrl!.replace(/\/+$/, "")}/api/fitbit/callback`
+function getFitbitConfig() {
+    return requireOAuthConfig({
+        clientId: process.env.FITBIT_CLIENT_ID!,
+        clientSecret: process.env.FITBIT_CLIENT_SECRET!,
+        clientIdEnvName: "FITBIT_CLIENT_ID",
+        clientSecretEnvName: "FITBIT_CLIENT_SECRET"
+    })
 }
 
 function getBasicAuthHeader() {
-    requireOAuthConfig()
-    return `Basic ${Buffer.from(`${fitbitClientId}:${fitbitClientSecret}`).toString("base64")}`
-}
-
-function tokenKey(telegramUserId: string) {
-    return `${TOKEN_KEY_PREFIX}${telegramUserId}`
-}
-
-function oauthStateKey(stateId: string) {
-    return `${OAUTH_STATE_KEY_PREFIX}${stateId}`
+    const config = getFitbitConfig()
+    return `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`
 }
 
 function newStateId() {
@@ -103,8 +92,7 @@ function getTodayDateString() {
 }
 
 async function saveToken(telegramUserId: string, tokenData: FitbitTokenResponse) {
-    await ensureStateConnected()
-    await state.set<StoredFitbitToken>(tokenKey(telegramUserId), {
+    await setStateValue<StoredFitbitToken>(keys.tokenKey(telegramUserId), {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
         expiresAt: Date.now() + tokenData.expires_in * 1000,
@@ -112,32 +100,26 @@ async function saveToken(telegramUserId: string, tokenData: FitbitTokenResponse)
     })
 }
 
-async function loadToken(telegramUserId: string) {
-    await ensureStateConnected()
-    return state.get<StoredFitbitToken>(tokenKey(telegramUserId))
-}
-
 export async function isFitbitConnected(telegramUserId: string) {
-    const token = await loadToken(telegramUserId)
+    const token = await getStateValue<StoredFitbitToken>(keys.tokenKey(telegramUserId))
     return Boolean(token?.refreshToken)
 }
 
 export async function createFitbitAuthorizationUrl(telegramUserId: string) {
-    await ensureStateConnected()
-
     const stateId = newStateId()
-    await state.set<StoredOAuthState>(
-        oauthStateKey(stateId),
+    await setStateValue<OAuthState>(
+        keys.oauthStateKey(stateId),
         { telegramUserId },
         OAUTH_STATE_TTL_MS
     )
 
-    const redirectUri = getFitbitRedirectUri()
+    const config = getFitbitConfig()
+    const redirectUri = buildOAuthRedirectUri(config.honoUrl, "fitbit")
     const scope = "heartrate sleep profile"
 
     return `https://www.fitbit.com/oauth2/authorize?${new URLSearchParams({
         response_type: "code",
-        client_id: fitbitClientId!,
+        client_id: config.clientId,
         redirect_uri: redirectUri,
         scope,
         state: stateId
@@ -166,8 +148,7 @@ export async function handleFitbitOAuthCallback(code: string, stateId: string) {
     if (!code) throw new Error("Missing OAuth code")
     if (!stateId) throw new Error("Missing OAuth state")
 
-    await ensureStateConnected()
-    const oauthState = await state.get<StoredOAuthState>(oauthStateKey(stateId))
+    const oauthState = await getStateValue<OAuthState>(keys.oauthStateKey(stateId))
     if (!oauthState?.telegramUserId) {
         throw new Error("Invalid or expired OAuth state")
     }
@@ -175,12 +156,12 @@ export async function handleFitbitOAuthCallback(code: string, stateId: string) {
     const params = new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: getFitbitRedirectUri()
+        redirect_uri: buildOAuthRedirectUri(getFitbitConfig().honoUrl, "fitbit")
     })
 
     const tokenData = await requestToken(params)
     await saveToken(oauthState.telegramUserId, tokenData)
-    await state.delete(oauthStateKey(stateId))
+    await deleteStateValue(keys.oauthStateKey(stateId))
     return { telegramUserId: oauthState.telegramUserId, tokenData }
 }
 
@@ -196,13 +177,13 @@ async function refreshFitbitToken(telegramUserId: string, refreshToken: string) 
 }
 
 async function getValidAccessTokenForUser(telegramUserId: string) {
-    const token = await loadToken(telegramUserId)
+    const token = await getStateValue<StoredFitbitToken>(keys.tokenKey(telegramUserId))
     if (!token) {
         const url = await createFitbitAuthorizationUrl(telegramUserId)
         throw new FitbitAuthorizationRequiredError(url)
     }
 
-    if (Date.now() < token.expiresAt - 60_000) {
+    if (isTokenValid(token.expiresAt)) {
         return {
             accessToken: token.accessToken,
             fitbitUserId: token.fitbitUserId

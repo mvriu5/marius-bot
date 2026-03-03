@@ -1,5 +1,19 @@
-import { ensureStateConnected, state } from "../types/state.js"
 import * as arctic from "arctic"
+import {
+    AuthorizationRequiredError,
+    buildOAuthRedirectUri,
+    formatArcticOAuthError,
+    requireOAuthConfig,
+    type PkceOAuthState
+} from "../oauth/oauthBase.js"
+import {
+    OAUTH_STATE_TTL_MS,
+    createTelegramOAuthKeys,
+    deleteStateValue,
+    getStateValue,
+    isTokenValid,
+    setStateValue
+} from "../oauth/oauthState.js"
 
 type GoogleCalendarEventsResponse = {
     items?: Array<{
@@ -18,14 +32,7 @@ type GoogleCalendarEventsResponse = {
 
 type GoogleCalendarEvent = NonNullable<GoogleCalendarEventsResponse["items"]>[number]
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
-const honoUrl = process.env.HONO_URL
-const calendarTimezone = process.env.GOOGLE_CALENDAR_TIMEZONE
-
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
-const TOKEN_KEY_PREFIX = "google:token:telegram:"
-const OAUTH_STATE_KEY_PREFIX = "google:oauth:state:"
+const keys = createTelegramOAuthKeys("google")
 
 type StoredGoogleToken = {
     accessToken: string
@@ -33,68 +40,25 @@ type StoredGoogleToken = {
     expiresAt: number
 }
 
-type StoredOAuthState = {
-    telegramUserId: string
-    codeVerifier: string
-}
-
-export class GoogleAuthorizationRequiredError extends Error {
-    authorizationUrl: string
-
+export class GoogleAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
-        super("Google authorization required")
-        this.name = "GoogleAuthorizationRequiredError"
-        this.authorizationUrl = authorizationUrl
+        super("Google", "GoogleAuthorizationRequiredError", authorizationUrl)
     }
-}
-
-function requireOAuthConfig() {
-    if (!googleClientId) throw new Error("Missing GOOGLE_CLIENT_ID")
-    if (!googleClientSecret) throw new Error("Missing GOOGLE_CLIENT_SECRET")
-    if (!honoUrl) throw new Error("Missing HONO_URL")
-}
-
-function getGoogleRedirectUri() {
-    requireOAuthConfig()
-    return `${honoUrl!.replace(/\/+$/, "")}/api/google/callback`
 }
 
 function getGoogleClient() {
-    requireOAuthConfig()
-    return new arctic.Google(googleClientId!, googleClientSecret!, getGoogleRedirectUri())
-}
+    const config = requireOAuthConfig({
+        clientId: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        clientIdEnvName: "GOOGLE_CLIENT_ID",
+        clientSecretEnvName: "GOOGLE_CLIENT_SECRET"
+    })
 
-function tokenKey(telegramUserId: string) {
-    return `${TOKEN_KEY_PREFIX}${telegramUserId}`
-}
-
-function oauthStateKey(stateId: string) {
-    return `${OAUTH_STATE_KEY_PREFIX}${stateId}`
-}
-
-function formatGoogleOAuthError(action: "code exchange" | "token refresh", error: unknown) {
-    if (error instanceof arctic.OAuth2RequestError) {
-        const description = error.description ? ` (${error.description})` : ""
-        return `Google OAuth ${action} failed: ${error.code}${description}`
-    }
-
-    if (error instanceof arctic.ArcticFetchError) {
-        return `Google OAuth ${action} failed: network error while contacting Google`
-    }
-
-    if (error instanceof arctic.UnexpectedResponseError) {
-        return `Google OAuth ${action} failed: unexpected HTTP status ${error.status}`
-    }
-
-    if (error instanceof arctic.UnexpectedErrorResponseBodyError) {
-        return `Google OAuth ${action} failed: unexpected error response body (${error.status})`
-    }
-
-    if (error instanceof Error) {
-        return `Google OAuth ${action} failed: ${error.message}`
-    }
-
-    return `Google OAuth ${action} failed`
+    return new arctic.Google(
+        config.clientId,
+        config.clientSecret,
+        buildOAuthRedirectUri(config.honoUrl, "google")
+    )
 }
 
 async function saveToken(
@@ -103,32 +67,24 @@ async function saveToken(
     expiresAt: number,
     refreshToken: string
 ) {
-    await ensureStateConnected()
-    await state.set<StoredGoogleToken>(tokenKey(telegramUserId), {
+    await setStateValue<StoredGoogleToken>(keys.tokenKey(telegramUserId), {
         accessToken,
         refreshToken,
         expiresAt
     })
 }
 
-async function loadToken(telegramUserId: string) {
-    await ensureStateConnected()
-    return state.get<StoredGoogleToken>(tokenKey(telegramUserId))
-}
-
 export async function isGoogleCalendarConnected(telegramUserId: string) {
-    const token = await loadToken(telegramUserId)
+    const token = await getStateValue<StoredGoogleToken>(keys.tokenKey(telegramUserId))
     return Boolean(token?.refreshToken)
 }
 
 export async function createGoogleAuthorizationUrl(telegramUserId: string) {
-    await ensureStateConnected()
-
     const google = getGoogleClient()
     const stateId = arctic.generateState()
     const codeVerifier = arctic.generateCodeVerifier()
-    await state.set<StoredOAuthState>(
-        oauthStateKey(stateId),
+    await setStateValue<PkceOAuthState>(
+        keys.oauthStateKey(stateId),
         { telegramUserId, codeVerifier },
         OAUTH_STATE_TTL_MS
     )
@@ -145,8 +101,7 @@ export async function handleGoogleOAuthCallback(code: string, stateId: string) {
     if (!code) throw new Error("Missing OAuth code")
     if (!stateId) throw new Error("Missing OAuth state")
 
-    await ensureStateConnected()
-    const oauthState = await state.get<StoredOAuthState>(oauthStateKey(stateId))
+    const oauthState = await getStateValue<PkceOAuthState>(keys.oauthStateKey(stateId))
     if (!oauthState?.telegramUserId) {
         throw new Error("Invalid or expired OAuth state")
     }
@@ -159,10 +114,10 @@ export async function handleGoogleOAuthCallback(code: string, stateId: string) {
     try {
         tokens = await google.validateAuthorizationCode(code, oauthState.codeVerifier)
     } catch (error) {
-        throw new Error(formatGoogleOAuthError("code exchange", error))
+        throw new Error(formatArcticOAuthError("Google", "code exchange", error))
     }
 
-    const existingToken = await loadToken(oauthState.telegramUserId)
+    const existingToken = await getStateValue<StoredGoogleToken>(keys.tokenKey(oauthState.telegramUserId))
     const refreshToken = tokens.hasRefreshToken()
         ? tokens.refreshToken()
         : existingToken?.refreshToken
@@ -176,7 +131,7 @@ export async function handleGoogleOAuthCallback(code: string, stateId: string) {
         tokens.accessTokenExpiresAt().getTime(),
         refreshToken
     )
-    await state.delete(oauthStateKey(stateId))
+    await deleteStateValue(keys.oauthStateKey(stateId))
     return { telegramUserId: oauthState.telegramUserId }
 }
 
@@ -186,7 +141,7 @@ async function refreshGoogleToken(telegramUserId: string, refreshToken: string) 
     try {
         tokens = await google.refreshAccessToken(refreshToken)
     } catch (error) {
-        throw new Error(formatGoogleOAuthError("token refresh", error))
+        throw new Error(formatArcticOAuthError("Google", "token refresh", error))
     }
 
     const updatedRefreshToken = tokens.hasRefreshToken()
@@ -203,13 +158,13 @@ async function refreshGoogleToken(telegramUserId: string, refreshToken: string) 
 }
 
 async function getValidAccessTokenForUser(telegramUserId: string) {
-    const token = await loadToken(telegramUserId)
+    const token = await getStateValue<StoredGoogleToken>(keys.tokenKey(telegramUserId))
     if (!token) {
         const url = await createGoogleAuthorizationUrl(telegramUserId)
         throw new GoogleAuthorizationRequiredError(url)
     }
 
-    if (Date.now() < token.expiresAt - 60_000) {
+    if (isTokenValid(token.expiresAt)) {
         return token.accessToken
     }
 
@@ -253,7 +208,7 @@ async function fetchTodayEvents(accessToken: string) {
         singleEvents: "true",
         orderBy: "startTime",
         maxResults: "15",
-        timeZone: calendarTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+        timeZone: process.env.GOOGLE_CALENDAR_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone
     })
 
     const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {

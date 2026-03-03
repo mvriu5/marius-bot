@@ -1,18 +1,35 @@
 import { Hono } from "hono"
-import { registerFitbitRoutes } from "./routes/fitbitRoute.js"
-import { registerGoogleRoutes } from "./routes/googleRoute.js"
 import { registerJobRoutes } from "./routes/jobsRoute.js"
+import { registerOAuthRoutes } from "./routes/oauthRoute.js"
 import { registerRootRoute } from "./routes/rootRoute.js"
 import { registerTelegramRoutes } from "./routes/telegramRoute.js"
-import { registerGithubRoutes } from "./routes/githubRoute.js"
+import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./lib/fitbit.js"
+import { createGoogleAuthorizationUrl, handleGoogleOAuthCallback } from "./lib/googleCalendar.js"
+import { createGithubAuthorizationUrl, handleGithubOAuthCallback } from "./lib/github.js"
 
 const app = new Hono()
 
 registerRootRoute(app)
 registerJobRoutes(app)
-registerFitbitRoutes(app)
-registerGoogleRoutes(app)
-registerGithubRoutes(app)
 registerTelegramRoutes(app)
+
+registerOAuthRoutes(app, {
+    providerName: "Fitbit",
+    basePath: "fitbit",
+    createAuthorizationUrl: createFitbitAuthorizationUrl,
+    handleOAuthCallback: handleFitbitOAuthCallback
+})
+registerOAuthRoutes(app, {
+    providerName: "Google",
+    basePath: "google",
+    createAuthorizationUrl: createGoogleAuthorizationUrl,
+    handleOAuthCallback: handleGoogleOAuthCallback
+})
+registerOAuthRoutes(app, {
+    providerName: "GitHub",
+    basePath: "github",
+    createAuthorizationUrl: createGithubAuthorizationUrl,
+    handleOAuthCallback: handleGithubOAuthCallback
+})
 
 export default app

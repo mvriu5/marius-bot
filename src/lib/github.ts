@@ -1,5 +1,19 @@
 import * as arctic from "arctic"
-import { ensureStateConnected, state } from "../types/state.js"
+import {
+    AuthorizationRequiredError,
+    buildOAuthRedirectUri,
+    formatArcticOAuthError,
+    requireOAuthConfig,
+    type OAuthState
+} from "../oauth/oauthBase.js"
+import {
+    OAUTH_STATE_TTL_MS,
+    createTelegramOAuthKeys,
+    deleteStateValue,
+    getStateValue,
+    isTokenValid,
+    setStateValue
+} from "../oauth/oauthState.js"
 
 type GithubUser = {
     login?: string
@@ -25,22 +39,12 @@ type GithubSearchIssuesResponse = {
     }>
 }
 
-const githubClientId = process.env.GITHUB_CLIENT_ID
-const githubClientSecret = process.env.GITHUB_CLIENT_SECRET
-const honoUrl = process.env.HONO_URL
-
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
-const TOKEN_KEY_PREFIX = "github:token:telegram:"
-const OAUTH_STATE_KEY_PREFIX = "github:oauth:state:"
+const keys = createTelegramOAuthKeys("github")
 
 type StoredGithubToken = {
     accessToken: string
     refreshToken?: string
     expiresAt?: number
-}
-
-type StoredOAuthState = {
-    telegramUserId: string
 }
 
 type GithubDailyCommitStats = {
@@ -55,63 +59,25 @@ type GithubAssignedItem = {
     repository: string
 }
 
-export class GithubAuthorizationRequiredError extends Error {
-    authorizationUrl: string
-
+export class GithubAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
-        super("GitHub authorization required")
-        this.name = "GithubAuthorizationRequiredError"
-        this.authorizationUrl = authorizationUrl
+        super("GitHub", "GithubAuthorizationRequiredError", authorizationUrl)
     }
-}
-
-function requireOAuthConfig() {
-    if (!githubClientId) throw new Error("Missing GITHUB_CLIENT_ID")
-    if (!githubClientSecret) throw new Error("Missing GITHUB_CLIENT_SECRET")
-    if (!honoUrl) throw new Error("Missing HONO_URL")
-}
-
-function getGithubRedirectUri() {
-    requireOAuthConfig()
-    return `${honoUrl!.replace(/\/+$/, "")}/api/github/callback`
 }
 
 function getGithubClient() {
-    requireOAuthConfig()
-    return new arctic.GitHub(githubClientId!, githubClientSecret!, getGithubRedirectUri())
-}
+    const config = requireOAuthConfig({
+        clientId: process.env.GITHUB_CLIENT_ID!,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+        clientIdEnvName: "GITHUB_CLIENT_ID",
+        clientSecretEnvName: "GITHUB_CLIENT_SECRET"
+    })
 
-function tokenKey(telegramUserId: string) {
-    return `${TOKEN_KEY_PREFIX}${telegramUserId}`
-}
-
-function oauthStateKey(stateId: string) {
-    return `${OAUTH_STATE_KEY_PREFIX}${stateId}`
-}
-
-function formatGithubOAuthError(action: "code exchange" | "token refresh", error: unknown) {
-    if (error instanceof arctic.OAuth2RequestError) {
-        const description = error.description ? ` (${error.description})` : ""
-        return `GitHub OAuth ${action} failed: ${error.code}${description}`
-    }
-
-    if (error instanceof arctic.ArcticFetchError) {
-        return `GitHub OAuth ${action} failed: network error while contacting GitHub`
-    }
-
-    if (error instanceof arctic.UnexpectedResponseError) {
-        return `GitHub OAuth ${action} failed: unexpected HTTP status ${error.status}`
-    }
-
-    if (error instanceof arctic.UnexpectedErrorResponseBodyError) {
-        return `GitHub OAuth ${action} failed: unexpected error response body (${error.status})`
-    }
-
-    if (error instanceof Error) {
-        return `GitHub OAuth ${action} failed: ${error.message}`
-    }
-
-    return `GitHub OAuth ${action} failed`
+    return new arctic.GitHub(
+        config.clientId,
+        config.clientSecret,
+        buildOAuthRedirectUri(config.honoUrl, "github")
+    )
 }
 
 function getExpiresAt(tokens: arctic.OAuth2Tokens) {
@@ -124,30 +90,22 @@ function getExpiresAt(tokens: arctic.OAuth2Tokens) {
 }
 
 async function saveToken(telegramUserId: string, tokens: arctic.OAuth2Tokens, previousRefreshToken?: string) {
-    await ensureStateConnected()
-    await state.set<StoredGithubToken>(tokenKey(telegramUserId), {
+    await setStateValue<StoredGithubToken>(keys.tokenKey(telegramUserId), {
         accessToken: tokens.accessToken(),
         refreshToken: tokens.hasRefreshToken() ? tokens.refreshToken() : previousRefreshToken,
         expiresAt: getExpiresAt(tokens)
     })
 }
 
-async function loadToken(telegramUserId: string) {
-    await ensureStateConnected()
-    return state.get<StoredGithubToken>(tokenKey(telegramUserId))
-}
-
 export async function isGithubConnected(telegramUserId: string) {
-    const token = await loadToken(telegramUserId)
+    const token = await getStateValue<StoredGithubToken>(keys.tokenKey(telegramUserId))
     return Boolean(token?.accessToken)
 }
 
 export async function createGithubAuthorizationUrl(telegramUserId: string) {
-    await ensureStateConnected()
-
     const github = getGithubClient()
     const stateId = arctic.generateState()
-    await state.set<StoredOAuthState>(oauthStateKey(stateId), { telegramUserId }, OAUTH_STATE_TTL_MS)
+    await setStateValue<OAuthState>(keys.oauthStateKey(stateId), { telegramUserId }, OAUTH_STATE_TTL_MS)
 
     return github.createAuthorizationURL(stateId, ["read:user", "repo"]).toString()
 }
@@ -156,8 +114,7 @@ export async function handleGithubOAuthCallback(code: string, stateId: string) {
     if (!code) throw new Error("Missing OAuth code")
     if (!stateId) throw new Error("Missing OAuth state")
 
-    await ensureStateConnected()
-    const oauthState = await state.get<StoredOAuthState>(oauthStateKey(stateId))
+    const oauthState = await getStateValue<OAuthState>(keys.oauthStateKey(stateId))
     if (!oauthState?.telegramUserId) {
         throw new Error("Invalid or expired OAuth state")
     }
@@ -167,12 +124,12 @@ export async function handleGithubOAuthCallback(code: string, stateId: string) {
     try {
         tokens = await github.validateAuthorizationCode(code)
     } catch (error) {
-        throw new Error(formatGithubOAuthError("code exchange", error))
+        throw new Error(formatArcticOAuthError("GitHub", "code exchange", error))
     }
 
-    const previousToken = await loadToken(oauthState.telegramUserId)
+    const previousToken = await getStateValue<StoredGithubToken>(keys.tokenKey(oauthState.telegramUserId))
     await saveToken(oauthState.telegramUserId, tokens, previousToken?.refreshToken)
-    await state.delete(oauthStateKey(stateId))
+    await deleteStateValue(keys.oauthStateKey(stateId))
     return { telegramUserId: oauthState.telegramUserId }
 }
 
@@ -182,7 +139,7 @@ async function refreshGithubToken(telegramUserId: string, refreshToken: string) 
     try {
         tokens = await github.refreshAccessToken(refreshToken)
     } catch (error) {
-        throw new Error(formatGithubOAuthError("token refresh", error))
+        throw new Error(formatArcticOAuthError("GitHub", "token refresh", error))
     }
 
     await saveToken(telegramUserId, tokens, refreshToken)
@@ -190,13 +147,13 @@ async function refreshGithubToken(telegramUserId: string, refreshToken: string) 
 }
 
 async function getValidAccessTokenForUser(telegramUserId: string) {
-    const token = await loadToken(telegramUserId)
+    const token = await getStateValue<StoredGithubToken>(keys.tokenKey(telegramUserId))
     if (!token) {
         const url = await createGithubAuthorizationUrl(telegramUserId)
         throw new GithubAuthorizationRequiredError(url)
     }
 
-    if (!token.expiresAt || Date.now() < token.expiresAt - 60_000) {
+    if (!token.expiresAt || isTokenValid(token.expiresAt)) {
         return token.accessToken
     }
 
