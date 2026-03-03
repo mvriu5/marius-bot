@@ -2,10 +2,12 @@ import * as arctic from "arctic"
 import {
     AuthorizationRequiredError,
     buildOAuthRedirectUri,
+    createInvalidOAuthCallbackError,
     formatArcticOAuthError,
     requireOAuthConfig,
     type OAuthState
 } from "../oauth/oauthBase.js"
+import { ProviderError, UserError } from "../errors/appError.js"
 import {
     OAUTH_STATE_TTL_MS,
     createTelegramOAuthKeys,
@@ -111,12 +113,12 @@ export async function createGithubAuthorizationUrl(telegramUserId: string) {
 }
 
 export async function handleGithubOAuthCallback(code: string, stateId: string) {
-    if (!code) throw new Error("Missing OAuth code")
-    if (!stateId) throw new Error("Missing OAuth state")
+    if (!code) throw createInvalidOAuthCallbackError("GitHub", "Missing OAuth code")
+    if (!stateId) throw createInvalidOAuthCallbackError("GitHub", "Missing OAuth state")
 
     const oauthState = await getStateValue<OAuthState>(keys.oauthStateKey(stateId))
     if (!oauthState?.telegramUserId) {
-        throw new Error("Invalid or expired OAuth state")
+        throw createInvalidOAuthCallbackError("GitHub", "Invalid or expired OAuth state")
     }
 
     const github = getGithubClient()
@@ -124,7 +126,14 @@ export async function handleGithubOAuthCallback(code: string, stateId: string) {
     try {
         tokens = await github.validateAuthorizationCode(code)
     } catch (error) {
-        throw new Error(formatArcticOAuthError("GitHub", "code exchange", error))
+        throw new ProviderError(
+            "github",
+            "GITHUB_OAUTH_CODE_EXCHANGE_FAILED",
+            "GitHub Anmeldung konnte nicht abgeschlossen werden.",
+            502,
+            formatArcticOAuthError("GitHub", "code exchange", error),
+            error
+        )
     }
 
     const previousToken = await getStateValue<StoredGithubToken>(keys.tokenKey(oauthState.telegramUserId))
@@ -139,7 +148,14 @@ async function refreshGithubToken(telegramUserId: string, refreshToken: string) 
     try {
         tokens = await github.refreshAccessToken(refreshToken)
     } catch (error) {
-        throw new Error(formatArcticOAuthError("GitHub", "token refresh", error))
+        throw new ProviderError(
+            "github",
+            "GITHUB_TOKEN_REFRESH_FAILED",
+            "GitHub Token konnte nicht erneuert werden.",
+            502,
+            formatArcticOAuthError("GitHub", "token refresh", error),
+            error
+        )
     }
 
     await saveToken(telegramUserId, tokens, refreshToken)
@@ -180,7 +196,13 @@ async function fetchGithubJson<T>(
 
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`GitHub API error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "github",
+            "GITHUB_API_ERROR",
+            "GitHub Daten konnten nicht geladen werden.",
+            502,
+            `GitHub API error (${response.status}): ${details}`
+        )
     }
 
     return response.json() as Promise<T>
@@ -189,7 +211,11 @@ async function fetchGithubJson<T>(
 async function getGithubUserLogin(accessToken: string) {
     const me = await fetchGithubJson<GithubUser>(accessToken, "/user")
     if (!me.login) {
-        throw new Error("GitHub user login could not be resolved")
+        throw new UserError(
+            "GITHUB_USER_LOGIN_MISSING",
+            "GitHub Benutzer konnte nicht ermittelt werden.",
+            "GitHub user login could not be resolved"
+        )
     }
     return me.login
 }

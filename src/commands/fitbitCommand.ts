@@ -1,4 +1,5 @@
-﻿import { Actions, Button, Card, CardText, LinkButton } from "chat"
+import { Actions, Button, Card, CardText, LinkButton } from "chat"
+import { postThreadError } from "../errors/errorOutput.js"
 import {
     FitbitAuthorizationRequiredError,
     createFitbitAuthorizationUrl,
@@ -44,8 +45,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                         })
                     )
                 } catch (error) {
-                    const details = error instanceof Error ? error.message : String(error)
-                    await ctx.thread.post(`⚠️ Fitbit Login konnte nicht gestartet werden: ${details}`)
+                    await postThreadError(ctx.thread, error, "Fitbit Login konnte nicht gestartet werden")
                 }
                 return
             }
@@ -54,11 +54,11 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                 Card({
                     title: "Fitbit",
                     children: [
-                        CardText("Wähle einen Subcommand:"),
+                        CardText("Waehle einen Subcommand:"),
                         Actions([
                             Button({
                                 id: "command:fitbit:summary",
-                                label: "🗒️ Summary",
+                                label: "Summary",
                                 value: "fitbit summary"
                             })
                         ])
@@ -83,8 +83,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                     })
                 )
             } catch (error) {
-                const details = error instanceof Error ? error.message : String(error)
-                await ctx.thread.post(`⚠️ Fitbit Login konnte nicht gestartet werden: ${details}`)
+                await postThreadError(ctx.thread, error, "Fitbit Login konnte nicht gestartet werden")
             }
             return
         }
@@ -101,11 +100,11 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
 
             await ctx.thread.post(
                 Card({
-                    title: "Fitbit Tagesübersicht",
+                    title: "Fitbit Tagesuebersicht",
                     children: [
-                        CardText(`🕑 Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
-                        CardText(`💓 HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
-                        CardText(`📉 Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)
+                        CardText(`Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
+                        CardText(`HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
+                        CardText(`Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)
                     ]
                 })
             )
@@ -125,8 +124,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                 return
             }
 
-            const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`⚠️ Fitbit konnte nicht geladen werden: ${details}`)
+            await postThreadError(ctx.thread, error, "Fitbit konnte nicht geladen werden")
         }
     }
 }

@@ -1,4 +1,5 @@
 import type { Hono } from "hono"
+import { logError, toHttpError } from "../errors/errorOutput.js"
 
 type OAuthRouteConfig = {
     providerName: string
@@ -14,8 +15,14 @@ export function registerOAuthRoutes(app: Hono, config: OAuthRouteConfig) {
         const userId = c.req.query("telegram_user_id")
         if (!userId) return c.text("Missing telegram_user_id query parameter", 400)
 
-        const url = await createAuthorizationUrl(userId)
-        return c.redirect(url)
+        try {
+            const url = await createAuthorizationUrl(userId)
+            return c.redirect(url)
+        } catch (error) {
+            logError(`${basePath}.connect`, error)
+            const httpError = toHttpError(error)
+            return c.json(httpError.body, httpError.status)
+        }
     })
 
     app.get(`/api/${basePath}/callback`, async (c) => {
@@ -34,9 +41,10 @@ export function registerOAuthRoutes(app: Hono, config: OAuthRouteConfig) {
         try {
             await handleOAuthCallback(code, state)
             return c.text("OK", 200)
-        } catch (err) {
-            const details = err instanceof Error ? err.message : String(err)
-            return c.text(`${providerName} callback failed: ${details}`, 500)
+        } catch (error) {
+            logError(`${basePath}.callback`, error)
+            const httpError = toHttpError(error)
+            return c.json(httpError.body, httpError.status)
         }
     })
 }

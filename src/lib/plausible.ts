@@ -37,7 +37,15 @@ function toNumber(value: unknown): number | null {
 
 function requirePlausibleConfig() {
     const apiKey = process.env.PLAUSIBLE_API_KEY?.trim()
-    if (!apiKey) throw new Error("Missing PLAUSIBLE_API_KEY")
+    if (!apiKey) {
+        throw new ProviderError(
+            "plausible",
+            "PLAUSIBLE_API_KEY_MISSING",
+            "Plausible Konfiguration ist unvollständig.",
+            500,
+            "Missing PLAUSIBLE_API_KEY"
+        )
+    }
 
     const rawSiteIds = [process.env.PLAUSIBLE_SITE_IDS, process.env.PLAUSIBLE_SITE_ID]
         .join(",")
@@ -46,7 +54,13 @@ function requirePlausibleConfig() {
         .filter(Boolean)
 
     if (rawSiteIds.length === 0) {
-        throw new Error("Missing PLAUSIBLE_SITE_IDS or PLAUSIBLE_SITE_ID")
+        throw new ProviderError(
+            "plausible",
+            "PLAUSIBLE_SITE_IDS_MISSING",
+            "Plausible Konfiguration ist unvollständig.",
+            500,
+            "Missing PLAUSIBLE_SITE_IDS or PLAUSIBLE_SITE_ID"
+        )
     }
 
     const seenSiteIds = new Set<string>()
@@ -140,7 +154,13 @@ async function fetchV2Aggregate(
 
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Plausible v2 error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "plausible",
+            "PLAUSIBLE_V2_REQUEST_FAILED",
+            "Plausible Daten konnten nicht geladen werden.",
+            502,
+            `Plausible v2 error (${response.status}): ${details}`
+        )
     }
 
     return parseV2Aggregate(await response.json())
@@ -165,7 +185,13 @@ async function fetchV1Aggregate(baseUrl: string, apiKey: string, siteId: string,
 
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Plausible v1 error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "plausible",
+            "PLAUSIBLE_V1_REQUEST_FAILED",
+            "Plausible Daten konnten nicht geladen werden.",
+            502,
+            `Plausible v1 error (${response.status}): ${details}`
+        )
     }
 
     return parseV1Aggregate(await response.json())
@@ -183,7 +209,13 @@ async function fetchSiteAnalytics(
     const metrics = v2Metrics ?? await fetchV1Aggregate(baseUrl, apiKey, site.siteId, windowStartIso, windowEndIso)
 
     if (!metrics) {
-        throw new Error(`Plausible response could not be parsed for ${site.siteId}`)
+        throw new ProviderError(
+            "plausible",
+            "PLAUSIBLE_RESPONSE_INVALID",
+            "Plausible Antwort war ungültig.",
+            502,
+            `Plausible response could not be parsed for ${site.siteId}`
+        )
     }
 
     return {
@@ -207,7 +239,11 @@ export async function getPlausibleLast24HoursAnalytics(siteQuery?: string): Prom
         : sites
 
     if (selectedSites.length === 0) {
-        throw new Error(`No Plausible site matched query: ${siteQuery}`)
+        throw new UserError(
+            "PLAUSIBLE_SITE_NOT_FOUND",
+            "Keine passende Site gefunden.",
+            `No Plausible site matched query: ${siteQuery}`
+        )
     }
 
     const results = await Promise.allSettled(selectedSites.map((site) =>
@@ -227,7 +263,13 @@ export async function getPlausibleLast24HoursAnalytics(siteQuery?: string): Prom
     }
 
     if (analytics.length === 0) {
-        throw new Error(`Plausible analytics failed: ${errors.join("; ")}`)
+        throw new ProviderError(
+            "plausible",
+            "PLAUSIBLE_ANALYTICS_FAILED",
+            "Plausible Daten konnten nicht geladen werden.",
+            502,
+            `Plausible analytics failed: ${errors.join("; ")}`
+        )
     }
 
     return {
@@ -237,3 +279,4 @@ export async function getPlausibleLast24HoursAnalytics(siteQuery?: string): Prom
         errors
     }
 }
+import { ProviderError, UserError } from "../errors/appError.js"

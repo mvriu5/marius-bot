@@ -1,4 +1,5 @@
 import * as arctic from "arctic"
+import { AuthError, ProviderError } from "../errors/appError.js"
 
 export type OAuthState = {
     telegramUserId: string
@@ -23,19 +24,40 @@ type OAuthConfig = {
     honoUrl: string
 }
 
-export class AuthorizationRequiredError extends Error {
+export class AuthorizationRequiredError extends AuthError {
     authorizationUrl: string
 
     constructor(providerName: string, errorName: string, authorizationUrl: string) {
-        super(`${providerName} authorization required`)
+        super(
+            "OAUTH_AUTHORIZATION_REQUIRED",
+            `${providerName} ist nicht verbunden. Bitte führe den Login aus.`,
+            401,
+            `${providerName} authorization required`
+        )
         this.name = errorName
         this.authorizationUrl = authorizationUrl
     }
 }
 
 export function requireOAuthConfig(input: OAuthConfigInput): OAuthConfig {
-    if (!input.clientId) throw new Error(`Missing ${input.clientIdEnvName}`)
-    if (!input.clientSecret) throw new Error(`Missing ${input.clientSecretEnvName}`)
+    if (!input.clientId) {
+        throw new ProviderError(
+            "config",
+            "MISSING_OAUTH_CLIENT_ID",
+            "OAuth Konfiguration ist unvollständig.",
+            500,
+            `Missing ${input.clientIdEnvName}`
+        )
+    }
+    if (!input.clientSecret) {
+        throw new ProviderError(
+            "config",
+            "MISSING_OAUTH_CLIENT_SECRET",
+            "OAuth Konfiguration ist unvollständig.",
+            500,
+            `Missing ${input.clientSecretEnvName}`
+        )
+    }
 
     return {
         clientId: input.clientId,
@@ -71,4 +93,13 @@ export function formatArcticOAuthError(providerName: string, action: OAuthAction
     }
 
     return `${providerName} OAuth ${action} failed`
+}
+
+export function createInvalidOAuthCallbackError(providerName: string, details: string) {
+    return new AuthError(
+        "OAUTH_CALLBACK_INVALID",
+        `${providerName} Anmeldung ist ungültig oder abgelaufen. Bitte neu verbinden.`,
+        401,
+        details
+    )
 }

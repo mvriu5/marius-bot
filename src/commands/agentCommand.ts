@@ -1,4 +1,5 @@
 import { postAgentReply } from "../agent/reply.js"
+import { postThreadError } from "../errors/errorOutput.js"
 import { activateAgentSession } from "../agent/session.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
@@ -18,14 +19,13 @@ const agentCommand: CommandDefinition<"agent", AgentParsedArgs> = {
             await activateAgentSession(ctx.thread.id, ctx.message.author.userId)
 
             if (!ctx.parsedArgs.question) {
-                await ctx.thread.post("Agent-Modus ist für 10 Minuten aktiv. Schreibe jetzt einfach deine Nachrichten ohne /agent.")
+                await ctx.thread.post("Agent-Modus ist fuer 10 Minuten aktiv. Schreibe jetzt einfach deine Nachrichten ohne /agent.")
                 return
             }
 
             await postAgentReply(ctx.thread, ctx.parsedArgs.question)
         } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`WARN: Agent konnte nicht antworten: ${details}`)
+            await postThreadError(ctx.thread, error, "Agent konnte nicht antworten")
         }
     }
 }

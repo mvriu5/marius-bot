@@ -14,14 +14,6 @@ const helpCommand: CommandDefinition<"help", {}> = {
             return `/${command.name}: ${description}`
         })
 
-        const subcommandLines = COMMAND_ENTRIES
-            .map(({ command }) => {
-                const subcommands = COMMAND_METADATA.get(command.name)?.subcommands ?? []
-                if (!subcommands || subcommands.length === 0) return null
-                return `/${command.name}: ${subcommands.join(", ")}`
-            })
-            .filter((line): line is string => Boolean(line))
-
         await ctx.thread.post(
             Card({
                 title: "📢 Verfügbare Befehle",
@@ -36,12 +28,6 @@ const helpCommand: CommandDefinition<"help", {}> = {
                     }),
                     CardText("Befehlsübersicht:"),
                     CardText(commandLines.join("\n")),
-                    ...(subcommandLines.length > 0
-                        ? [
-                            CardText("Erlaubte Subcommands:"),
-                            CardText(subcommandLines.join("\n"))
-                        ]
-                        : [])
                 ]
             })
         )

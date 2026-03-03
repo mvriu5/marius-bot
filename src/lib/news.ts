@@ -113,7 +113,13 @@ export async function getTodayNews(limit = 5): Promise<NewsSummary> {
         RSS_SOURCES.map(async (source) => {
             const response = await fetch(source.url)
             if (!response.ok) {
-                throw new Error(`${source.category} feed failed (${response.status})`)
+                throw new ProviderError(
+                    "news",
+                    "NEWS_FEED_REQUEST_FAILED",
+                    "News konnten derzeit nicht geladen werden.",
+                    502,
+                    `${source.category} feed failed (${response.status})`
+                )
             }
             const xml = await response.text()
             return parseRssItems(xml, source.category)
@@ -135,7 +141,11 @@ export async function getTodayNews(limit = 5): Promise<NewsSummary> {
     const topItems = selectBalanced(dedupedItems, clampedLimit)
 
     if (topItems.length === 0) {
-        throw new Error(`Keine News gefunden${errors.length ? ` (${errors.join("; ")})` : ""}`)
+        throw new UserError(
+            "NEWS_EMPTY",
+            "Keine News gefunden.",
+            `Keine News gefunden${errors.length ? ` (${errors.join("; ")})` : ""}`
+        )
     }
 
     return {
@@ -143,3 +153,4 @@ export async function getTodayNews(limit = 5): Promise<NewsSummary> {
         errors
     }
 }
+import { ProviderError, UserError } from "../errors/appError.js"

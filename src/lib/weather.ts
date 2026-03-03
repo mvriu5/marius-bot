@@ -14,6 +14,7 @@ type OpenMeteoResponse = {
 }
 
 import { ensureStateConnected, state } from "../types/state.js"
+import { ProviderError, UserError } from "../errors/appError.js"
 
 type GeocodingResponse = {
     results?: Array<{
@@ -99,13 +100,19 @@ async function resolveLocation(location?: string) {
     const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params.toString()}`)
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Geocoding error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "weather",
+            "GEOCODING_REQUEST_FAILED",
+            "Ort konnte nicht aufgelöst werden.",
+            502,
+            `Geocoding error (${response.status}): ${details}`
+        )
     }
 
     const data = (await response.json()) as GeocodingResponse
     const result = data.results?.[0]
     if (!result || result.latitude === undefined || result.longitude === undefined || !result.name) {
-        throw new Error(`Ort nicht gefunden: ${input}`)
+        throw new UserError("LOCATION_NOT_FOUND", `Ort nicht gefunden: ${input}`)
     }
 
     const label = result.country ? `${result.name}, ${result.country}` : result.name
@@ -144,7 +151,13 @@ export async function getTodayWeather(location?: string): Promise<WeatherSummary
     const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Weather API error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "weather",
+            "WEATHER_API_REQUEST_FAILED",
+            "Wetterdaten konnten nicht geladen werden.",
+            502,
+            `Weather API error (${response.status}): ${details}`
+        )
     }
 
     const data = (await response.json()) as OpenMeteoResponse

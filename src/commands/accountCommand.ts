@@ -1,4 +1,5 @@
 import { Actions, Button, Card, CardText } from "chat"
+import { postThreadError } from "../errors/errorOutput.js"
 import { isFitbitConnected } from "../lib/fitbit.js"
 import { isGithubConnected } from "../lib/github.js"
 import { isGoogleCalendarConnected } from "../lib/googleCalendar.js"
@@ -18,9 +19,9 @@ const accountCommand: CommandDefinition<"account", {}> = {
             ])
 
             const statusLines = [
-                `Fitbit: ${fitbitConnected ? "✅" : "🚫"}`,
-                `Google Calendar: ${googleConnected ? "✅" : "🚫"}`,
-                `Github: ${githubConnected ? "✅" : "🚫"}`
+                `Fitbit: ${fitbitConnected ? "[x]" : "[ ]"}`,
+                `Google Calendar: ${googleConnected ? "[x]" : "[ ]"}`,
+                `GitHub: ${githubConnected ? "[x]" : "[ ]"}`
             ]
 
             const loginButtons = [
@@ -40,13 +41,12 @@ const accountCommand: CommandDefinition<"account", {}> = {
                                 CardText("Nicht verbundene Dienste:"),
                                 Actions(availableLoginButtons)
                             ]
-                            : [CardText("✅ Alle Dienste sind verbunden.")])
+                            : [CardText("Alle Dienste sind verbunden.")])
                     ]
                 })
             )
         } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`⚠️ Account-Status konnte nicht geladen werden: ${details}`)
+            await postThreadError(ctx.thread, error, "Account-Status konnte nicht geladen werden")
         }
     }
 }

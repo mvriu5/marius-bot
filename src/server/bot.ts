@@ -14,6 +14,7 @@ import {
     isValidCommand
 } from "./registry.js"
 import { parseActionToCommand } from "../lib/utils.js"
+import { postThreadError } from "../errors/errorOutput.js"
 
 export const bot = new Chat({
     userName: process.env.TELEGRAM_BOT_USERNAME!,
@@ -49,7 +50,11 @@ async function executeCommandWithValidation(ctx: CommandContext) {
         return
     }
 
-    await commandDef.execute(ctx, parsed.value)
+    try {
+        await commandDef.execute(ctx, parsed.value)
+    } catch (error) {
+        await postThreadError(ctx.thread, error, `/${ctx.command} fehlgeschlagen`)
+    }
 }
 
 bot.onNewMention(async (thread) => {
@@ -93,8 +98,12 @@ bot.onSubscribedMessage(async (thread, message) => {
         const agentSessionActive = await isAgentSessionActive(thread.id, message.author.userId)
         if (!agentSessionActive) return
 
-        await rememberBriefingTarget(message.author.userId, thread.id)
-        await postAgentReply(thread, trimmedText)
+        try {
+            await rememberBriefingTarget(message.author.userId, thread.id)
+            await postAgentReply(thread, trimmedText)
+        } catch (error) {
+            await postThreadError(thread, error, "Agent konnte nicht antworten")
+        }
         return
     }
 

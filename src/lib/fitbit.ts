@@ -9,9 +9,11 @@ import {
 import {
     AuthorizationRequiredError,
     buildOAuthRedirectUri,
+    createInvalidOAuthCallbackError,
     type OAuthState,
     requireOAuthConfig
 } from "../oauth/oauthBase.js"
+import { ProviderError } from "../errors/appError.js"
 
 type FitbitSleepResponse = {
     sleep?: Array<{
@@ -138,19 +140,25 @@ async function requestToken(params: URLSearchParams) {
 
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Fitbit token request failed (${response.status}): ${details}`)
+        throw new ProviderError(
+            "fitbit",
+            "FITBIT_TOKEN_REQUEST_FAILED",
+            "Fitbit Anmeldung ist derzeit nicht verfuegbar.",
+            502,
+            `Fitbit token request failed (${response.status}): ${details}`
+        )
     }
 
     return (await response.json()) as FitbitTokenResponse
 }
 
 export async function handleFitbitOAuthCallback(code: string, stateId: string) {
-    if (!code) throw new Error("Missing OAuth code")
-    if (!stateId) throw new Error("Missing OAuth state")
+    if (!code) throw createInvalidOAuthCallbackError("Fitbit", "Missing OAuth code")
+    if (!stateId) throw createInvalidOAuthCallbackError("Fitbit", "Missing OAuth state")
 
     const oauthState = await getStateValue<OAuthState>(keys.oauthStateKey(stateId))
     if (!oauthState?.telegramUserId) {
-        throw new Error("Invalid or expired OAuth state")
+        throw createInvalidOAuthCallbackError("Fitbit", "Invalid or expired OAuth state")
     }
 
     const params = new URLSearchParams({
@@ -207,7 +215,13 @@ async function fetchFitbitJson<T>(accessToken: string, path: string): Promise<T>
 
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Fitbit API error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "fitbit",
+            "FITBIT_API_ERROR",
+            "Fitbit Daten konnten nicht geladen werden.",
+            502,
+            `Fitbit API error (${response.status}): ${details}`
+        )
     }
 
     return response.json() as Promise<T>

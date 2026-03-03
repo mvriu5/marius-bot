@@ -1,4 +1,5 @@
-﻿import { Actions, Button, Card, CardText, LinkButton } from "chat"
+import { Actions, Button, Card, CardText, LinkButton } from "chat"
+import { postThreadError } from "../errors/errorOutput.js"
 import {
     GoogleAuthorizationRequiredError,
     createGoogleAuthorizationUrl,
@@ -44,8 +45,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingsParsedArgs> = {
                         })
                     )
                 } catch (error) {
-                    const details = error instanceof Error ? error.message : String(error)
-                    await ctx.thread.post(`⚠️ Google Login konnte nicht gestartet werden: ${details}`)
+                    await postThreadError(ctx.thread, error, "Google Login konnte nicht gestartet werden")
                 }
                 return
             }
@@ -54,11 +54,11 @@ const meetingCommand: CommandDefinition<"meetings", MeetingsParsedArgs> = {
                 Card({
                     title: "Meetings",
                     children: [
-                        CardText("Wähle einen Subcommand:"),
+                        CardText("Waehle einen Subcommand:"),
                         Actions([
                             Button({
                                 id: "command:meetings:summary",
-                                label: "🗒️ Summary",
+                                label: "Summary",
                                 value: "meetings summary"
                             })
                         ])
@@ -84,8 +84,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingsParsedArgs> = {
                 )
 
             } catch (error) {
-                const details = error instanceof Error ? error.message : String(error)
-                await ctx.thread.post(`⚠️ Google Login konnte nicht gestartet werden: ${details}`)
+                await postThreadError(ctx.thread, error, "Google Login konnte nicht gestartet werden")
             }
             return
         }
@@ -109,8 +108,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingsParsedArgs> = {
                 return
             }
 
-            const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`⚠️ Meetings konnten nicht geladen werden: ${details}`)
+            await postThreadError(ctx.thread, error, "Meetings konnten nicht geladen werden")
         }
     }
 }

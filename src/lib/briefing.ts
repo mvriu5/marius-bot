@@ -3,6 +3,7 @@ import { getCommand, isValidCommand } from "../server/registry.js"
 import { bot } from "../server/bot.js"
 import { ensureStateConnected, state } from "../types/state.js"
 import { RawCommandContext } from "../types/command.js"
+import { postThreadError } from "../errors/errorOutput.js"
 
 const BRIEFING_TARGETS_KEY = "briefing:targets"
 
@@ -77,8 +78,7 @@ async function runBriefingStep(
     try {
         return await runBriefingCommand(thread, message, step.command, step.args)
     } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        await thread.post(`Daily briefing Fehler bei ${step.label}: ${details}`)
+        await postThreadError(thread, error, `Daily briefing Fehler bei ${step.label}`)
         return false
     }
 }

@@ -2,10 +2,12 @@ import * as arctic from "arctic"
 import {
     AuthorizationRequiredError,
     buildOAuthRedirectUri,
+    createInvalidOAuthCallbackError,
     formatArcticOAuthError,
     requireOAuthConfig,
     type PkceOAuthState
 } from "../oauth/oauthBase.js"
+import { AuthError, ProviderError } from "../errors/appError.js"
 import {
     OAUTH_STATE_TTL_MS,
     createTelegramOAuthKeys,
@@ -98,15 +100,20 @@ export async function createGoogleAuthorizationUrl(telegramUserId: string) {
 }
 
 export async function handleGoogleOAuthCallback(code: string, stateId: string) {
-    if (!code) throw new Error("Missing OAuth code")
-    if (!stateId) throw new Error("Missing OAuth state")
+    if (!code) throw createInvalidOAuthCallbackError("Google", "Missing OAuth code")
+    if (!stateId) throw createInvalidOAuthCallbackError("Google", "Missing OAuth state")
 
     const oauthState = await getStateValue<PkceOAuthState>(keys.oauthStateKey(stateId))
     if (!oauthState?.telegramUserId) {
-        throw new Error("Invalid or expired OAuth state")
+        throw createInvalidOAuthCallbackError("Google", "Invalid or expired OAuth state")
     }
     if (!oauthState.codeVerifier) {
-        throw new Error("Missing OAuth code_verifier")
+        throw new AuthError(
+            "GOOGLE_OAUTH_CODE_VERIFIER_MISSING",
+            "Google Anmeldung ist ungültig oder abgelaufen. Bitte neu verbinden.",
+            401,
+            "Missing OAuth code_verifier"
+        )
     }
 
     const google = getGoogleClient()
@@ -114,7 +121,14 @@ export async function handleGoogleOAuthCallback(code: string, stateId: string) {
     try {
         tokens = await google.validateAuthorizationCode(code, oauthState.codeVerifier)
     } catch (error) {
-        throw new Error(formatArcticOAuthError("Google", "code exchange", error))
+        throw new ProviderError(
+            "google",
+            "GOOGLE_OAUTH_CODE_EXCHANGE_FAILED",
+            "Google Anmeldung konnte nicht abgeschlossen werden.",
+            502,
+            formatArcticOAuthError("Google", "code exchange", error),
+            error
+        )
     }
 
     const existingToken = await getStateValue<StoredGoogleToken>(keys.tokenKey(oauthState.telegramUserId))
@@ -122,7 +136,13 @@ export async function handleGoogleOAuthCallback(code: string, stateId: string) {
         ? tokens.refreshToken()
         : existingToken?.refreshToken
     if (!refreshToken) {
-        throw new Error("Google token response missing refresh_token")
+        throw new ProviderError(
+            "google",
+            "GOOGLE_REFRESH_TOKEN_MISSING",
+            "Google Anmeldung ist unvollstaendig. Bitte erneut verbinden.",
+            502,
+            "Google token response missing refresh_token"
+        )
     }
 
     await saveToken(
@@ -141,7 +161,14 @@ async function refreshGoogleToken(telegramUserId: string, refreshToken: string) 
     try {
         tokens = await google.refreshAccessToken(refreshToken)
     } catch (error) {
-        throw new Error(formatArcticOAuthError("Google", "token refresh", error))
+        throw new ProviderError(
+            "google",
+            "GOOGLE_TOKEN_REFRESH_FAILED",
+            "Google Token konnte nicht erneuert werden.",
+            502,
+            formatArcticOAuthError("Google", "token refresh", error),
+            error
+        )
     }
 
     const updatedRefreshToken = tokens.hasRefreshToken()
@@ -219,7 +246,13 @@ async function fetchTodayEvents(accessToken: string) {
 
     if (!response.ok) {
         const details = await response.text()
-        throw new Error(`Google Calendar API error (${response.status}): ${details}`)
+        throw new ProviderError(
+            "google",
+            "GOOGLE_CALENDAR_API_ERROR",
+            "Google Calendar Daten konnten nicht geladen werden.",
+            502,
+            `Google Calendar API error (${response.status}): ${details}`
+        )
     }
 
     return (await response.json()) as GoogleCalendarEventsResponse

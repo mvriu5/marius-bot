@@ -1,4 +1,5 @@
 import { Actions, Button, Card, CardLink, CardText, LinkButton } from "chat"
+import { postThreadError } from "../errors/errorOutput.js"
 import {
     GithubAuthorizationRequiredError,
     createGithubAuthorizationUrl,
@@ -45,8 +46,7 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
                         })
                     )
                 } catch (error) {
-                    const details = error instanceof Error ? error.message : String(error)
-                    await ctx.thread.post(`⚠️ GitHub Login konnte nicht gestartet werden: ${details}`)
+                    await postThreadError(ctx.thread, error, "GitHub Login konnte nicht gestartet werden")
                 }
                 return
             }
@@ -55,7 +55,7 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
                 Card({
                     title: "GitHub",
                     children: [
-                        CardText("Wähle einen Subcommand:"),
+                        CardText("Waehle einen Subcommand:"),
                         Actions([
                             Button({ id: "command:github:commits", label: "Commits", value: "github commits" }),
                             Button({ id: "command:github:issues", label: "Issues", value: "github issues" }),
@@ -80,8 +80,7 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
                     })
                 )
             } catch (error) {
-                const details = error instanceof Error ? error.message : String(error)
-                await ctx.thread.post(`⚠️ GitHub Login konnte nicht gestartet werden: ${details}`)
+                await postThreadError(ctx.thread, error, "GitHub Login konnte nicht gestartet werden")
             }
             return
         }
@@ -152,8 +151,7 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
                 return
             }
 
-            const details = error instanceof Error ? error.message : String(error)
-            await ctx.thread.post(`⚠️ GitHub konnte nicht geladen werden: ${details}`)
+            await postThreadError(ctx.thread, error, "GitHub konnte nicht geladen werden")
         }
     }
 }

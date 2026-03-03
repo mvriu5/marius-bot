@@ -1,4 +1,5 @@
 import type { Hono } from "hono"
+import { logError, toHttpError } from "../errors/errorOutput.js"
 import { runDailyBriefing } from "../lib/briefing.js"
 
 export function registerJobRoutes(app: Hono) {
@@ -12,8 +13,9 @@ export function registerJobRoutes(app: Hono) {
             const result = await runDailyBriefing()
             return c.json({ ok: true, ...result }, 200)
         } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            return c.json({ ok: false, error: details }, 500)
+            logError("jobs.daily-briefing", error)
+            const httpError = toHttpError(error)
+            return c.json(httpError.body, httpError.status)
         }
     })
 }
