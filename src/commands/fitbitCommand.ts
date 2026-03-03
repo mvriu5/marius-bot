@@ -54,7 +54,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                 Card({
                     title: "Fitbit",
                     children: [
-                        CardText("Waehle einen Subcommand:"),
+                        CardText("Wähle einen Subcommand:"),
                         Actions([
                             Button({
                                 id: "command:fitbit:summary",
@@ -100,7 +100,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
 
             await ctx.thread.post(
                 Card({
-                    title: "Fitbit Tagesuebersicht",
+                    title: "Fitbit Tagesübersicht",
                     children: [
                         CardText(`Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
                         CardText(`HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),

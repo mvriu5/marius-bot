@@ -54,7 +54,7 @@ export function normalizeError(error: unknown): AppError {
         return new ProviderError(
             "internal",
             "UNEXPECTED",
-            "Interner Fehler. Bitte spaeter erneut versuchen.",
+            "Interner Fehler. Bitte später erneut versuchen.",
             500,
             error.message,
             error
@@ -64,7 +64,7 @@ export function normalizeError(error: unknown): AppError {
     return new ProviderError(
         "internal",
         "UNKNOWN",
-        "Interner Fehler. Bitte spaeter erneut versuchen.",
+        "Interner Fehler. Bitte später erneut versuchen.",
         500,
         String(error)
     )

@@ -54,7 +54,7 @@ const meetingCommand: CommandDefinition<"meetings", MeetingsParsedArgs> = {
                 Card({
                     title: "Meetings",
                     children: [
-                        CardText("Waehle einen Subcommand:"),
+                        CardText("Wähle einen Subcommand:"),
                         Actions([
                             Button({
                                 id: "command:meetings:summary",

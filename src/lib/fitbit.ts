@@ -143,7 +143,7 @@ async function requestToken(params: URLSearchParams) {
         throw new ProviderError(
             "fitbit",
             "FITBIT_TOKEN_REQUEST_FAILED",
-            "Fitbit Anmeldung ist derzeit nicht verfuegbar.",
+            "Fitbit Anmeldung ist derzeit nicht verfügbar.",
             502,
             `Fitbit token request failed (${response.status}): ${details}`
         )

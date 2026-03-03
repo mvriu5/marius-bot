@@ -49,7 +49,7 @@ async function runBriefingCommand(
         return false
     }
     if (!commandDef.validateArgs(args)) {
-        await thread.post(`Daily briefing Fehler: ungueltige Argumente fuer /${command}`)
+        await thread.post(`Daily briefing Fehler: ungültige Argumente für /${command}`)
         return false
     }
 

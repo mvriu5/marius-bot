@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { registerJobRoutes } from "./routes/jobsRoute.js"
 import { registerOAuthRoutes } from "./routes/oauthRoute.js"
+import { registerQstashRoutes } from "./routes/qstashRoute.js"
 import { registerRootRoute } from "./routes/rootRoute.js"
 import { registerTelegramRoutes } from "./routes/telegramRoute.js"
 import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./lib/fitbit.js"
@@ -12,6 +13,7 @@ const app = new Hono()
 registerRootRoute(app)
 registerJobRoutes(app)
 registerTelegramRoutes(app)
+registerQstashRoutes(app)
 
 registerOAuthRoutes(app, {
     providerName: "Fitbit",

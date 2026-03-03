@@ -139,7 +139,7 @@ export async function handleGoogleOAuthCallback(code: string, stateId: string) {
         throw new ProviderError(
             "google",
             "GOOGLE_REFRESH_TOKEN_MISSING",
-            "Google Anmeldung ist unvollstaendig. Bitte erneut verbinden.",
+            "Google Anmeldung ist unvollständig. Bitte erneut verbinden.",
             502,
             "Google token response missing refresh_token"
         )

@@ -7,6 +7,7 @@ import { github } from "../commands/githubCommand.js"
 import { help } from "../commands/helpCommand.js"
 import { meetings } from "../commands/meetingCommand.js"
 import { news } from "../commands/newsCommand.js"
+import { remind } from "../commands/remindCommand.js"
 import { weather } from "../commands/weatherCommand.js"
 import { type RawCommandContext as BaseCommandContext } from "../types/command.js"
 
@@ -19,7 +20,7 @@ export const COMMAND_ENTRIES = [
     },
     {
         command: clear,
-        description: "Loescht Bot-Nachrichten im aktuellen Thread.",
+        description: "Löscht Bot-Nachrichten im aktuellen Thread.",
         subcommands: [] as const,
         actionIds: [] as const
     },
@@ -39,6 +40,12 @@ export const COMMAND_ENTRIES = [
         command: news,
         description: "Liest die aktuellen News-Feeds.",
         subcommands: [] as const,
+        actionIds: [] as const
+    },
+    {
+        command: remind,
+        description: "Setzt eine Erinnerung zu einer Uhrzeit.",
+        subcommands: ["HH:MM <text>", "YYYY-MM-DD HH:MM <text>"] as const,
         actionIds: [] as const
     },
     {

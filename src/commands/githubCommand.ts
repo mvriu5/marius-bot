@@ -55,7 +55,7 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
                 Card({
                     title: "GitHub",
                     children: [
-                        CardText("Waehle einen Subcommand:"),
+                        CardText("Wähle einen Subcommand:"),
                         Actions([
                             Button({ id: "command:github:commits", label: "Commits", value: "github commits" }),
                             Button({ id: "command:github:issues", label: "Issues", value: "github issues" }),
