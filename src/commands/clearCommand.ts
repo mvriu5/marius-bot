@@ -5,7 +5,9 @@ import { clearAgentSession } from "../agent/session.js"
 
 const CLEAR_LOOKBACK_LIMIT = Math.max(50, 1000)
 
-function parseCompositeMessageId(value: string) {
+function parseCompositeMessageId(value: string | undefined) {
+    if (!value) return null
+
     const match = value.match(/^(-?\d+):(\d+)$/)
     if (!match) return null
 
