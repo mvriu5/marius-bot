@@ -11,6 +11,10 @@ type ReminderPayload = {
     createdAtMs: number
 }
 
+type ScheduledReminder = ReminderPayload & {
+    qstashMessageId: string
+}
+
 type ScheduleReminderInput = {
     threadId: string
     userId: string
@@ -36,7 +40,7 @@ function requireReminderConfig() {
         throw new ProviderError(
             "qstash",
             "QSTASH_TOKEN_MISSING",
-            "Reminder-Konfiguration ist unvollstaendig.",
+            "Reminder-Konfiguration ist unvollständig.",
             500,
             "Missing QSTASH_TOKEN"
         )
@@ -71,7 +75,7 @@ function newReminderId() {
     return `rem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-export async function scheduleReminder(input: ScheduleReminderInput): Promise<ReminderPayload> {
+export async function scheduleReminder(input: ScheduleReminderInput): Promise<ScheduledReminder> {
     const text = input.text.trim()
     if (!text) {
         throw new UserError("REMINDER_TEXT_MISSING", "Bitte gib einen Erinnerungstext an.")
@@ -100,11 +104,16 @@ export async function scheduleReminder(input: ScheduleReminderInput): Promise<Re
             token: qstashToken,
             ...(qstashUrl ? { baseUrl: qstashUrl } : {})
         })
-        await client.publishJSON({
+        const publishResult = await client.publishJSON({
             url: callbackUrl,
             body: payload,
             delay: delaySeconds
         })
+
+        return {
+            ...payload,
+            qstashMessageId: publishResult.messageId
+        }
     } catch (error) {
         throw new ProviderError(
             "qstash",
@@ -116,7 +125,6 @@ export async function scheduleReminder(input: ScheduleReminderInput): Promise<Re
         )
     }
 
-    return payload
 }
 
 export async function verifyQstashSignature(input: {

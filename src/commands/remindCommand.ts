@@ -23,7 +23,7 @@ function parseDueAtMs(dateToken: string | undefined, timeToken: string) {
     const minute = Number(minuteText)
 
     if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        throw new UserError("REMINDER_TIME_INVALID", "Uhrzeit ist ungültig.")
+        throw new UserError("REMINDER_TIME_INVALID", "Uhrzeit ist ungueltig.")
     }
 
     const now = new Date()
@@ -37,7 +37,7 @@ function parseDueAtMs(dateToken: string | undefined, timeToken: string) {
     const due = new Date(`${dateToken}T${timeToken}:00`)
 
     if (Number.isNaN(due.getTime())) {
-        throw new UserError("REMINDER_DATE_INVALID", "Datum ist ungültig.")
+        throw new UserError("REMINDER_DATE_INVALID", "Datum ist ungueltig.")
     }
 
     if (due.getTime() <= now.getTime()) {
@@ -85,7 +85,9 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
                 timeStyle: "short"
             }).format(new Date(reminder.dueAtMs))
 
-            await ctx.thread.post(`Erinnerung gesetzt für ${formatted}: ${reminder.text}`)
+            await ctx.thread.post(
+                `Erinnerung gesetzt fuer ${formatted}: ${reminder.text} (QStash ID: ${reminder.qstashMessageId})`
+            )
         } catch (error) {
             await postThreadError(ctx.thread, error, "Reminder konnte nicht gesetzt werden")
         }
