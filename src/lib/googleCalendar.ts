@@ -258,17 +258,33 @@ async function fetchTodayEvents(accessToken: string) {
     return (await response.json()) as GoogleCalendarEventsResponse
 }
 
+function toEventDate(value?: string) {
+    if (!value) return null
+    if (value.includes("T")) return new Date(value)
+    return new Date(`${value}T00:00:00`)
+}
+
+function isUpcomingOrOngoingEvent(event: GoogleCalendarEvent, now: Date) {
+    const eventEnd = toEventDate(event.end?.dateTime ?? event.end?.date)
+    if (eventEnd) return eventEnd.getTime() > now.getTime()
+
+    const eventStart = toEventDate(event.start?.dateTime ?? event.start?.date)
+    if (!eventStart) return false
+    return eventStart.getTime() >= now.getTime()
+}
+
 export async function getTodayCalendarEventsSummary(telegramUserId: string) {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const eventsResponse = await fetchTodayEvents(accessToken)
-    const events = eventsResponse.items ?? []
+    const now = new Date()
+    const events = (eventsResponse.items ?? []).filter((event) => isUpcomingOrOngoingEvent(event, now))
 
     if (events.length === 0) {
-        return "Heute stehen keine Termine im Google Calendar."
+        return "Heute stehen keine anstehenden Termine mehr im Google Calendar."
     }
 
     const lines = [
-        "Heutige Termine:",
+        "Anstehende Termine heute:",
         ...events.map((event) => {
             const title = event.summary || "Ohne Titel"
             const time = formatEventTime(event)

@@ -63,13 +63,13 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `Wetter (${summary.locationLabel})`,
+                    title: `🌈 Wetter (${summary.locationLabel})`,
                     children: [
                         CardText(`${summary.conditionEmoji} Zustand: ${summary.condition}`),
-                        CardText(`Jetzt: ${formatTemp(summary.temperatureC)} (gefuehlt ${formatTemp(summary.apparentTemperatureC)})`),
-                        CardText(`Wind: ${summary.windSpeedKmh ?? "n/a"} km/h`),
-                        CardText(`Heute min/max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
-                        CardText(`Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`)
+                        CardText(`✨ Jetzt: ${formatTemp(summary.temperatureC)} (gefuehlt ${formatTemp(summary.apparentTemperatureC)})`),
+                        CardText(`💨 Wind: ${summary.windSpeedKmh ?? "n/a"} km/h`),
+                        CardText(`🔥 Heute min/max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
+                        CardText(`💧 Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`)
                     ]
                 })
             )

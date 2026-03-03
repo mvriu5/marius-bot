@@ -102,9 +102,9 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                 Card({
                     title: "Fitbit Tagesübersicht",
                     children: [
-                        CardText(`Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
-                        CardText(`HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
-                        CardText(`Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)
+                        CardText(`😴 Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
+                        CardText(`💓 HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
+                        CardText(`💗 Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)
                     ]
                 })
             )

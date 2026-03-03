@@ -14,13 +14,13 @@ const newsCommand: CommandDefinition<"news", {}> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `News (${summary.items.length} Meldungen)`,
+                    title: `🗞️ News (${summary.items.length} Meldungen)`,
                     children: [
                         ...titleLines.map((line) => CardText(line)),
                         Actions(
                             summary.items.map((item, index) =>
                                 LinkButton({
-                                    label: `${index + 1}.`,
+                                    label: `${index + 1}`,
                                     url: item.link
                                 })
                             )

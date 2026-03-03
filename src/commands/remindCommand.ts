@@ -190,7 +190,7 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
     argPolicy: { type: "any" },
     parseArgs: (args) => {
         if (args.length < 2) {
-            return { ok: false, message: "Nutzung: /remind <5m|1h|2d> <text> oder /remind HH:MM <text> oder /remind YYYY-MM-DD HH:MM <text>" }
+            return { ok: false, message: "Nutzung: /remind <duration|time|datetime> <text>" }
         }
 
         if (isDurationToken(args[0])) {
@@ -211,7 +211,7 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
             return { ok: true, value: { dateToken: args[0], timeToken: args[1], text } }
         }
 
-        return { ok: false, message: "Nutzung: /remind <5m|1h|2d> <text> oder /remind HH:MM <text> oder /remind YYYY-MM-DD HH:MM <text>" }
+        return { ok: false, message: "Nutzung: /remind <duration|time|datetime> <text>" }
     },
     execute: async (ctx) => {
         try {
@@ -222,7 +222,7 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
                 timezone,
                 ctx.parsedArgs.durationToken
             )
-            const reminder = await scheduleReminder({
+            await scheduleReminder({
                 threadId: ctx.thread.id,
                 userId: ctx.message.author.userId,
                 text: ctx.parsedArgs.text,

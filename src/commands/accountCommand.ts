@@ -19,9 +19,9 @@ const accountCommand: CommandDefinition<"account", {}> = {
             ])
 
             const statusLines = [
-                `Fitbit: ${fitbitConnected ? "[x]" : "[ ]"}`,
-                `Google Calendar: ${googleConnected ? "[x]" : "[ ]"}`,
-                `GitHub: ${githubConnected ? "[x]" : "[ ]"}`
+                `Fitbit: ${fitbitConnected ? "✅" : "⛔️"}`,
+                `Google Calendar: ${googleConnected ? "✅" : "⛔️"}`,
+                `GitHub: ${githubConnected ? "✅" : "⛔️"}`
             ]
 
             const loginButtons = [
@@ -33,7 +33,7 @@ const accountCommand: CommandDefinition<"account", {}> = {
 
             await ctx.thread.post(
                 Card({
-                    title: "Account Verbindungen",
+                    title: "🔗 Account Verbindungen",
                     children: [
                         CardText(statusLines.join("\n")),
                         ...(availableLoginButtons.length > 0

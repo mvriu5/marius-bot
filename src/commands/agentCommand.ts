@@ -19,7 +19,7 @@ const agentCommand: CommandDefinition<"agent", AgentParsedArgs> = {
             await activateAgentSession(ctx.thread.id, ctx.message.author.userId)
 
             if (!ctx.parsedArgs.question) {
-                await ctx.thread.post("Agent-Modus ist fuer 10 Minuten aktiv. Schreibe jetzt einfach deine Nachrichten ohne /agent.")
+                await ctx.thread.post("Agent-Modus ist für 10 Minuten aktiv. Schreibe jetzt einfach deine Nachrichten ohne /agent.")
                 return
             }
 
