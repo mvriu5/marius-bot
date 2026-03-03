@@ -7,14 +7,25 @@ import {
 } from "../lib/fitbit.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-type FitbitArgs = [] | [action: "login" | "summary"]
+type FitbitAction = "menu" | "login" | "summary"
+type FitbitParsedArgs = {
+    action: FitbitAction
+}
 
-const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
+const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
     name: "fitbit",
     argPolicy: { type: "max", max: 1 },
+    parseArgs: (args) => {
+        const action = args[0]
+        if (!action) return { ok: true, value: { action: "menu" as const } }
+        if (action === "login" || action === "summary") {
+            return { ok: true, value: { action } }
+        }
+        return { ok: false, message: "Unbekannter Fitbit-Subcommand" }
+    },
     execute: async (ctx) => {
-        const action = ctx.args[0]
-        if (!action) {
+        const { action } = ctx.parsedArgs
+        if (action === "menu") {
             const userId = ctx.message.author.userId
             const connected = await isFitbitConnected(userId)
 
@@ -75,11 +86,6 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitArgs> = {
                 const details = error instanceof Error ? error.message : String(error)
                 await ctx.thread.post(`⚠️ Fitbit Login konnte nicht gestartet werden: ${details}`)
             }
-            return
-        }
-
-        if (action !== "summary") {
-            await ctx.thread.post("⚠️ Unbekannter Fitbit-Subcommand.")
             return
         }
 

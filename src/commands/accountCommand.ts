@@ -4,9 +4,10 @@ import { isGithubConnected } from "../lib/github.js"
 import { isGoogleCalendarConnected } from "../lib/googleCalendar.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-const accountCommand: CommandDefinition<"account"> = {
+const accountCommand: CommandDefinition<"account", {}> = {
     name: "account",
     argPolicy: { type: "none" },
+    parseArgs: () => ({ ok: true, value: {} }),
     execute: async (ctx) => {
         try {
             const userId = ctx.message.author.userId

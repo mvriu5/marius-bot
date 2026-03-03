@@ -2,9 +2,10 @@ import { Actions, Card, CardText, Divider, LinkButton } from "chat"
 import { getTodayNews } from "../lib/news.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-const newsCommand: CommandDefinition<"news"> = {
+const newsCommand: CommandDefinition<"news", {}> = {
     name: "news",
     argPolicy: { type: "none" },
+    parseArgs: () => ({ ok: true, value: {} }),
     execute: async (ctx) => {
         try {
             const summary = await getTodayNews()

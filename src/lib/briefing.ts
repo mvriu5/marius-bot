@@ -2,7 +2,7 @@ import { Message, Thread } from "chat"
 import { getCommand, isValidCommand } from "../server/registry.js"
 import { bot } from "../server/bot.js"
 import { ensureStateConnected, state } from "../types/state.js"
-import { CommandContext } from "../types/command.js"
+import { RawCommandContext } from "../types/command.js"
 
 const BRIEFING_TARGETS_KEY = "briefing:targets"
 
@@ -52,14 +52,20 @@ async function runBriefingCommand(
         return false
     }
 
-    const ctx: CommandContext = {
+    const ctx: RawCommandContext = {
         thread,
         message,
         command,
         args
     }
 
-    await commandDef.execute(ctx)
+    const parsed = commandDef.parseArgs(args)
+    if (!parsed.ok) {
+        await thread.post(`Daily briefing Fehler: ${parsed.message}`)
+        return false
+    }
+
+    await commandDef.execute(ctx, parsed.value)
     return true
 }
 

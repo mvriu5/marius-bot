@@ -7,14 +7,25 @@ import {
 } from "../lib/googleCalendar.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-type MeetingArgs = [] | [action: "login" | "summary"]
+type MeetingsAction = "menu" | "login" | "summary"
+type MeetingsParsedArgs = {
+    action: MeetingsAction
+}
 
-const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
+const meetingCommand: CommandDefinition<"meetings", MeetingsParsedArgs> = {
     name: "meetings",
     argPolicy: { type: "max", max: 1 },
+    parseArgs: (args) => {
+        const action = args[0]
+        if (!action) return { ok: true, value: { action: "menu" as const } }
+        if (action === "login" || action === "summary") {
+            return { ok: true, value: { action } }
+        }
+        return { ok: false, message: "Unbekannter Meetings-Subcommand" }
+    },
     execute: async (ctx) => {
-        const action = ctx.args[0]
-        if (!action) {
+        const { action } = ctx.parsedArgs
+        if (action === "menu") {
             const userId = ctx.message.author.userId
             const connected = await isGoogleCalendarConnected(userId)
 
@@ -76,11 +87,6 @@ const meetingCommand: CommandDefinition<"meetings", MeetingArgs> = {
                 const details = error instanceof Error ? error.message : String(error)
                 await ctx.thread.post(`⚠️ Google Login konnte nicht gestartet werden: ${details}`)
             }
-            return
-        }
-
-        if (action !== "summary") {
-            await ctx.thread.post("⚠️ Unbekannter Meetings-Subcommand.")
             return
         }
 

@@ -8,7 +8,7 @@ import { help } from "../commands/helpCommand.js"
 import { meetings } from "../commands/meetingCommand.js"
 import { news } from "../commands/newsCommand.js"
 import { weather } from "../commands/weatherCommand.js"
-import { type CommandContext as BaseCommandContext } from "../types/command.js"
+import { type RawCommandContext as BaseCommandContext } from "../types/command.js"
 
 export const COMMAND_ENTRIES = [
     {

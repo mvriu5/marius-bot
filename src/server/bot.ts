@@ -39,7 +39,17 @@ async function executeCommandWithValidation(ctx: CommandContext) {
         return
     }
 
-    await commandDef.execute(ctx)
+    const parsed = commandDef.parseArgs(ctx.args)
+    if (!parsed.ok) {
+        const subcommands = COMMAND_METADATA.get(ctx.command)?.subcommands ?? []
+        const usageHint = subcommands.length > 0
+            ? ` Erlaubt: ${subcommands.join(", ")}`
+            : ""
+        await ctx.thread.post(`${parsed.message}.${usageHint}`)
+        return
+    }
+
+    await commandDef.execute(ctx, parsed.value)
 }
 
 bot.onNewMention(async (thread) => {

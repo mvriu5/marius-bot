@@ -2,13 +2,20 @@ import { Card, CardText, Divider } from "chat"
 import { getPlausibleLast24HoursAnalytics } from "../lib/plausible.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-const analyticsCommand: CommandDefinition<"analytics"> = {
+type AnalyticsParsedArgs = {
+    siteQuery?: string
+}
+
+const analyticsCommand: CommandDefinition<"analytics", AnalyticsParsedArgs> = {
     name: "analytics",
     argPolicy: { type: "any" },
+    parseArgs: (args) => {
+        const siteQuery = args.join(" ").trim()
+        return { ok: true, value: { siteQuery: siteQuery || undefined } }
+    },
     execute: async (ctx) => {
         try {
-            const siteQuery = ctx.args.join(" ").trim()
-            const summary = await getPlausibleLast24HoursAnalytics(siteQuery || undefined)
+            const summary = await getPlausibleLast24HoursAnalytics(ctx.parsedArgs.siteQuery)
 
             const formatPercent = (value: number | null) =>
                 value === null || Number.isNaN(value) ? "n/a" : `${value.toFixed(1)}%`
@@ -24,7 +31,7 @@ const analyticsCommand: CommandDefinition<"analytics"> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `Website Analytics (letzte 24h)`,
+                    title: "Website Analytics (letzte 24h)",
                     children: [
                         ...summary.sites.flatMap((site, index) => [
                             CardText(`🏷️ Site: ${site.label} (${site.siteId})`),

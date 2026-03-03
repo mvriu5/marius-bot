@@ -6,26 +6,35 @@ import {
 } from "../lib/weather.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-type WeatherArgs = string[]
+type WeatherParsedArgs =
+    | { mode: "set"; location: string }
+    | { mode: "query"; location?: string }
 
-const weatherCommand: CommandDefinition<"weather", WeatherArgs> = {
+const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
     name: "weather",
     argPolicy: { type: "any" },
+    parseArgs: (rawArgs) => {
+        const args = rawArgs.map((arg) => arg.trim()).filter(Boolean)
+        const [firstArg, ...restArgs] = args
+
+        if (firstArg?.toLowerCase() === "set") {
+            const location = restArgs.join(" ").trim()
+            if (!location) {
+                return { ok: false, message: "Bitte nutze: /weather set <location>" }
+            }
+            return { ok: true, value: { mode: "set", location } }
+        }
+
+        const location = args.join(" ").trim()
+        return { ok: true, value: { mode: "query", location: location || undefined } }
+    },
     execute: async (ctx) => {
         try {
-            const args = ctx.args.map((arg) => arg.trim()).filter(Boolean)
-            const [firstArg, ...restArgs] = args
             const userId = ctx.message.author.userId
 
-            if (firstArg?.toLowerCase() === "set") {
-                const locationToSet = restArgs.join(" ").trim()
-                if (!locationToSet) {
-                    await ctx.thread.post("Bitte nutze: /weather set <location>")
-                    return
-                }
-
-                const summary = await getTodayWeather(locationToSet)
-                await rememberWeatherLocation(userId, locationToSet)
+            if (ctx.parsedArgs.mode === "set") {
+                const summary = await getTodayWeather(ctx.parsedArgs.location)
+                await rememberWeatherLocation(userId, ctx.parsedArgs.location)
 
                 await ctx.thread.post(
                     Card({
@@ -39,7 +48,7 @@ const weatherCommand: CommandDefinition<"weather", WeatherArgs> = {
                 return
             }
 
-            let locationForQuery = args.join(" ").trim()
+            let locationForQuery = ctx.parsedArgs.location ?? ""
             if (!locationForQuery) {
                 locationForQuery = (await getRememberedWeatherLocation(userId)) ?? ""
                 if (!locationForQuery) {

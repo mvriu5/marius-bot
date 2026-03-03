@@ -3,9 +3,10 @@ import { Command, type CommandDefinition } from "../types/command.js"
 import { clearMessageHistory, getMessageIds } from "../lib/messageHistory.js"
 import { clearAgentSession } from "../agent/session.js"
 
-const clearCommand: CommandDefinition<"clear"> = {
+const clearCommand: CommandDefinition<"clear", {}> = {
     name: "clear",
     argPolicy: { type: "none" },
+    parseArgs: () => ({ ok: true, value: {} }),
     execute: async (ctx) => {
         const knownById = new Map<string, Message>()
 

@@ -9,15 +9,26 @@ import {
 } from "../lib/github.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-type GithubArgs = [] | [action: "login" | "commits" | "issues" | "prs"]
+type GithubAction = "menu" | "login" | "commits" | "issues" | "prs"
+type GithubParsedArgs = {
+    action: GithubAction
+}
 
-const githubCommand: CommandDefinition<"github", GithubArgs> = {
+const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
     name: "github",
     argPolicy: { type: "max", max: 1 },
+    parseArgs: (args) => {
+        const action = args[0]
+        if (!action) return { ok: true, value: { action: "menu" as const } }
+        if (action === "login" || action === "commits" || action === "issues" || action === "prs") {
+            return { ok: true, value: { action } }
+        }
+        return { ok: false, message: "Unbekannter GitHub-Subcommand" }
+    },
     execute: async (ctx) => {
-        const action = ctx.args[0]
+        const { action } = ctx.parsedArgs
 
-        if (!action) {
+        if (action === "menu") {
             const userId = ctx.message.author.userId
             const connected = await isGithubConnected(userId)
 
@@ -72,11 +83,6 @@ const githubCommand: CommandDefinition<"github", GithubArgs> = {
                 const details = error instanceof Error ? error.message : String(error)
                 await ctx.thread.post(`⚠️ GitHub Login konnte nicht gestartet werden: ${details}`)
             }
-            return
-        }
-
-        if (action !== "commits" && action !== "issues" && action !== "prs") {
-            await ctx.thread.post("⚠️ Unbekannter GitHub-Subcommand.")
             return
         }
 
