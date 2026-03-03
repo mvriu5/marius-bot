@@ -14,55 +14,55 @@ import { type RawCommandContext as BaseCommandContext } from "../types/command.j
 export const COMMAND_ENTRIES = [
     {
         command: help,
-        description: "Zeigt alle verfügbaren Befehle.",
+        description: "📢 Zeigt alle verfügbaren Befehle.",
         subcommands: [] as const,
         actionIds: [] as const
     },
     {
         command: clear,
-        description: "Löscht Bot-Nachrichten im aktuellen Thread.",
+        description: "🧹 Löscht Bot-Nachrichten im aktuellen Thread.",
         subcommands: [] as const,
         actionIds: [] as const
     },
     {
         command: fitbit,
-        description: "Zeigt Fitbit-Daten und Login-Optionen.",
+        description: "⌚ Zeigt Fitbit-Daten und Login-Optionen.",
         subcommands: ["login", "summary"] as const,
         actionIds: ["command:fitbit:login", "command:fitbit:summary"] as const
     },
     {
         command: weather,
-        description: "Zeigt das Wetter oder speichert eine Standard-Location.",
+        description: "🌤️ Zeigt das Wetter oder speichert eine Standard-Location.",
         subcommands: ["set <location>"] as const,
         actionIds: [] as const
     },
     {
         command: news,
-        description: "Liest die aktuellen News-Feeds.",
+        description: "📰 Liest die aktuellen News-Feeds.",
         subcommands: [] as const,
         actionIds: [] as const
     },
     {
         command: remind,
-        description: "Setzt eine Erinnerung zu einer Uhrzeit.",
-        subcommands: ["5m|1h|2d <text>", "HH:MM <text>", "YYYY-MM-DD HH:MM <text>"] as const,
+        description: "⏰ Setzt eine Erinnerung zu einer Uhrzeit.",
+        subcommands: ["<duration|time|datetime> <text>"] as const,
         actionIds: [] as const
     },
     {
         command: meetings,
-        description: "Zeigt heutige Kalender-Meetings.",
+        description: "📅 Zeigt heutige Kalender-Meetings.",
         subcommands: ["login", "summary"] as const,
         actionIds: ["command:meetings:login", "command:meetings:summary"] as const
     },
     {
         command: account,
-        description: "Zeigt den Verbindungsstatus aller Integrationen.",
+        description: "👤 Zeigt den Verbindungsstatus aller Integrationen.",
         subcommands: [] as const,
         actionIds: [] as const
     },
     {
         command: github,
-        description: "Zeigt GitHub Commits, Issues und PRs.",
+        description: "🐙 Zeigt GitHub Commits, Issues und PRs.",
         subcommands: ["login", "commits", "issues", "prs"] as const,
         actionIds: [
             "command:github:login",
@@ -73,13 +73,13 @@ export const COMMAND_ENTRIES = [
     },
     {
         command: analytics,
-        description: "Zeigt Website-Analytics der letzten 24 Stunden.",
+        description: "📊 Zeigt Website-Analytics der letzten 24 Stunden.",
         subcommands: ["<site (optional)>"] as const,
         actionIds: [] as const
     },
     {
         command: agent,
-        description: "Aktiviert den Agent-Modus oder beantwortet eine Frage.",
+        description: "🤖 Aktiviert den Agent-Modus oder beantwortet eine Frage.",
         subcommands: ["<frage>"] as const,
         actionIds: [] as const
     }

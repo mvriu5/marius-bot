@@ -3,7 +3,7 @@ import { type ModelMessage, stepCountIs, ToolLoopAgent } from "ai"
 import { emoji } from "chat"
 import { ProviderError } from "../errors/appError.js"
 
-export type AgentAnswer = {
+type AgentAnswer = {
     text: string
     reactionName?: string
 }
