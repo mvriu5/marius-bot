@@ -53,13 +53,10 @@ export async function askAgent(question: string, history: ModelMessage[] = []): 
 
     const parsed = parseAgentOutput(rawAnswer)
     if (!parsed.text) {
-        throw new ProviderError(
-            "openai",
-            "OPENAI_EMPTY_RESPONSE_TEXT",
-            "Agent konnte keine Antwort erzeugen.",
-            502,
-            "OpenAI lieferte nur Steuer-Tokens ohne Antworttext."
-        )
+        return {
+            text: "",
+            reactionName: parsed.reactionName
+        }
     }
 
     return parsed

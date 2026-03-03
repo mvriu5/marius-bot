@@ -1,5 +1,6 @@
 import { Actions, Button, Card, CardText, emoji, type Message, type Thread } from "chat"
 import type { ModelMessage } from "ai"
+import { logError } from "../errors/errorOutput.js"
 import { askAgent } from "./agent.js"
 import { extractTwoChoices } from "./choice.js"
 
@@ -67,8 +68,13 @@ export async function postAgentReply(
     if (sourceMessage?.id && answer.reactionName) {
         const reaction = resolveEmojiByName(answer.reactionName)
         if (reaction) {
-            const userMessage = thread.createSentMessageFromMessage(sourceMessage)
-            await userMessage.addReaction(reaction)
+            try {
+                const userMessage = thread.createSentMessageFromMessage(sourceMessage)
+                await userMessage.addReaction(reaction)
+            } catch (error) {
+                // Reactions are best-effort (platforms can reject unsupported emoji).
+                logError("agent.reaction", error)
+            }
         }
     }
 }
