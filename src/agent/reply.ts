@@ -1,21 +1,22 @@
-import { Actions, Button, Card, CardText, emoji, type Message, type Thread } from "chat"
+import { Actions, Button, Card, CardText, emoji, type EmojiValue, type Message, type Thread } from "chat"
 import type { ModelMessage } from "ai"
-import { logError } from "../errors/errorOutput.js"
 import { askAgent } from "./agent.js"
 import { extractTwoChoices } from "./choice.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
-type EmojiMap = Record<string, string>
 
-function resolveEmojiByName(name: string): string | null {
-    const map = emoji as unknown as EmojiMap
-    return map[name] ?? null
+function resolveEmojiByName(name: string): EmojiValue | null {
+    const normalized = name.toLowerCase().trim()
+    const candidate = (emoji as unknown as Record<string, unknown>)[normalized]
+    if (!candidate || typeof candidate !== "object") return null
+    if (!("name" in candidate)) return null
+    return candidate as EmojiValue
 }
 
 function renderEmojiTokens(input: string): string {
     return input.replace(/:([a-z0-9_]+):/gi, (full, rawName: string) => {
         const value = resolveEmojiByName(rawName.toLowerCase())
-        return value ?? full
+        return value ? value.toString() : full
     })
 }
 
@@ -73,7 +74,11 @@ export async function postAgentReply(
                 await userMessage.addReaction(reaction)
             } catch (error) {
                 // Reactions are best-effort (platforms can reject unsupported emoji).
-                logError("agent.reaction", error)
+                const details = error instanceof Error ? error.message : String(error)
+                console.info("[agent.reaction] skipped", {
+                    reactionName: answer.reactionName,
+                    reason: details
+                })
             }
         }
     }
