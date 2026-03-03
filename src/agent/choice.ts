@@ -31,12 +31,15 @@ function toChoice(label: string): ChoiceButton | null {
 }
 
 export function extractTwoChoices(text: string): [ChoiceButton, ChoiceButton] | null {
+    const urlPattern = /https?:\/\/\S+/i
     const lines = text
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
 
     for (const line of lines) {
+        if (urlPattern.test(line)) continue
+
         const yesNoMatch = line.match(/\b(ja|yes)\b\s*(?:\/|oder|or)\s*\b(nein|no)\b/i)
         if (yesNoMatch) {
             const left = toChoice("Ja")
@@ -46,7 +49,7 @@ export function extractTwoChoices(text: string): [ChoiceButton, ChoiceButton] | 
 
         if (!line.includes("?")) continue
 
-        const slashMatch = line.match(/(.+?)\s*\/\s*(.+?)(?:[?.!]|$)/)
+        const slashMatch = line.match(/(.+?)\s\/\s(.+?)(?:[?.!]|$)/)
         if (slashMatch) {
             const left = toChoice(slashMatch[1] ?? "")
             const right = toChoice(slashMatch[2] ?? "")
