@@ -240,14 +240,10 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
     if (task.status !== "waiting") return
 
     const pr = await findCopilotPrForIssue(task.userId, task.repoFullName, task.issueNumber)
-    if (pr) {
+    if (pr && !pr.isDraft) {
         const safeRepoFullName = escapeTelegramMarkdown(task.repoFullName)
         const safePrTitle = escapeTelegramMarkdown(pr.title)
         const safeSummary = escapeTelegramMarkdown(summarizePrBody(pr.body))
-        const safeTopFiles = pr.topFiles.map((file) => escapeTelegramMarkdown(file))
-        const prStatusLine = pr.isDraft
-            ? "Status: Draft (Mergen setzt ihn automatisch auf Ready for review)"
-            : "Status: Ready for review"
         const prActions = [
             Button({
                 id: "c:copilot:merge",
