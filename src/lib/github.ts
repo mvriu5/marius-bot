@@ -61,6 +61,63 @@ type GithubAssignedItem = {
     repository: string
 }
 
+type GithubUserRepo = {
+    full_name?: string
+    default_branch?: string
+    permissions?: {
+        push?: boolean
+    }
+}
+
+type GithubIssueResponse = {
+    number?: number
+    html_url?: string
+}
+
+type GithubTimelineCrossReferenceEvent = {
+    event?: string
+    source?: {
+        issue?: {
+            number?: number
+            html_url?: string
+            pull_request?: {
+                url?: string
+                html_url?: string
+            }
+        }
+    }
+}
+
+type GithubPullRequestResponse = {
+    number?: number
+    html_url?: string
+    title?: string
+    body?: string
+    additions?: number
+    deletions?: number
+    changed_files?: number
+}
+
+type GithubPullRequestFile = {
+    filename?: string
+}
+
+type GithubCopilotTaskInfo = {
+    issueNumber: number
+    issueUrl: string
+}
+
+type GithubCopilotPrInfo = {
+    number: number
+    url: string
+    title: string
+    body: string
+    additions: number
+    deletions: number
+    changedFiles: number
+    topFiles: string[]
+}
+
 export class GithubAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
         super("GitHub", "GithubAuthorizationRequiredError", authorizationUrl)
@@ -231,6 +288,17 @@ function getRepositoryFromUrl(repositoryUrl: string | undefined) {
     return `${owner}/${repo}`
 }
 
+function splitRepoFullName(repoFullName: string) {
+    const [owner, repo] = repoFullName.split("/")
+    if (!owner || !repo) {
+        throw new UserError(
+            "GITHUB_REPOSITORY_INVALID",
+            "Repository muss im Format owner/repo angegeben werden."
+        )
+    }
+    return { owner, repo }
+}
+
 function getStartOfTodayIso() {
     const now = new Date()
     now.setHours(0, 0, 0, 0)
@@ -305,4 +373,199 @@ export async function getGithubAssignedPrs(
         url: item.html_url ?? "",
         repository: getRepositoryFromUrl(item.repository_url)
     }))
+}
+
+export async function listGithubWritableRepositories(
+    telegramUserId: string,
+    limit = 8
+): Promise<Array<{ fullName: string; defaultBranch: string }>> {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const perPage = Math.max(1, Math.min(50, limit * 3))
+    const repos = await fetchGithubJson<GithubUserRepo[]>(
+        accessToken,
+        `/user/repos?sort=updated&direction=desc&affiliation=owner,collaborator,organization_member&per_page=${perPage}`
+    )
+
+    return repos
+        .filter((repo) => repo.permissions?.push && repo.full_name)
+        .slice(0, limit)
+        .map((repo) => ({
+            fullName: repo.full_name as string,
+            defaultBranch: repo.default_branch || "main"
+        }))
+}
+
+export async function createCopilotIssueTask(
+    telegramUserId: string,
+    repoFullName: string,
+    prompt: string
+): Promise<GithubCopilotTaskInfo> {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const { owner, repo } = splitRepoFullName(repoFullName)
+    const repoInfo = await fetchGithubJson<GithubUserRepo>(accessToken, `/repos/${owner}/${repo}`)
+    const baseBranch = repoInfo.default_branch || "main"
+    const title = `Copilot task: ${prompt.trim().slice(0, 80) || "Task"}`
+    const body = [
+        "Requested via Telegram bot.",
+        "",
+        "Task:",
+        prompt.trim()
+    ].join("\n")
+
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "telegram-bot",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title,
+            body,
+            assignees: ["copilot-swe-agent[bot]"],
+            agent_assignment: {
+                target_repo: repoFullName,
+                base_branch: baseBranch
+            }
+        })
+    })
+
+    if (!response.ok) {
+        const details = await response.text()
+        throw new ProviderError(
+            "github",
+            "GITHUB_COPILOT_TASK_CREATE_FAILED",
+            "Copilot Task konnte nicht gestartet werden.",
+            502,
+            `Copilot issue creation failed (${response.status}): ${details}`
+        )
+    }
+
+    const issue = await response.json() as GithubIssueResponse
+    if (!issue.number || !issue.html_url) {
+        throw new ProviderError(
+            "github",
+            "GITHUB_COPILOT_TASK_INVALID_RESPONSE",
+            "Copilot Task konnte nicht gestartet werden.",
+            502,
+            "Issue response missing number or html_url"
+        )
+    }
+
+    return {
+        issueNumber: issue.number,
+        issueUrl: issue.html_url
+    }
+}
+
+export async function findCopilotPrForIssue(
+    telegramUserId: string,
+    repoFullName: string,
+    issueNumber: number
+): Promise<GithubCopilotPrInfo | null> {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const { owner, repo } = splitRepoFullName(repoFullName)
+    const timeline = await fetchGithubJson<GithubTimelineCrossReferenceEvent[]>(
+        accessToken,
+        `/repos/${owner}/${repo}/issues/${issueNumber}/timeline?per_page=100`
+    )
+
+    const prNumber = timeline
+        .filter((event) => event.event === "cross-referenced")
+        .map((event) => event.source?.issue)
+        .find((issue) => Boolean(issue?.pull_request?.url))
+        ?.number
+
+    if (!prNumber) return null
+
+    const pr = await fetchGithubJson<GithubPullRequestResponse>(
+        accessToken,
+        `/repos/${owner}/${repo}/pulls/${prNumber}`
+    )
+
+    const files = await fetchGithubJson<GithubPullRequestFile[]>(
+        accessToken,
+        `/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=20`
+    )
+
+    if (!pr.number || !pr.html_url) return null
+
+    return {
+        number: pr.number,
+        url: pr.html_url,
+        title: pr.title || "Ohne Titel",
+        body: pr.body || "",
+        additions: pr.additions ?? 0,
+        deletions: pr.deletions ?? 0,
+        changedFiles: pr.changed_files ?? files.length,
+        topFiles: files.map((file) => file.filename).filter((name): name is string => Boolean(name)).slice(0, 5)
+    }
+}
+
+export async function mergePullRequest(
+    telegramUserId: string,
+    repoFullName: string,
+    prNumber: number
+) {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const { owner, repo } = splitRepoFullName(repoFullName)
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
+        method: "PUT",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "telegram-bot",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            merge_method: "squash"
+        })
+    })
+
+    if (!response.ok) {
+        const details = await response.text()
+        throw new ProviderError(
+            "github",
+            "GITHUB_PR_MERGE_FAILED",
+            "Pull Request konnte nicht gemerged werden.",
+            502,
+            `PR merge failed (${response.status}): ${details}`
+        )
+    }
+}
+
+export async function closePullRequest(
+    telegramUserId: string,
+    repoFullName: string,
+    prNumber: number
+) {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const { owner, repo } = splitRepoFullName(repoFullName)
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`, {
+        method: "PATCH",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "telegram-bot",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            state: "closed"
+        })
+    })
+
+    if (!response.ok) {
+        const details = await response.text()
+        throw new ProviderError(
+            "github",
+            "GITHUB_PR_CLOSE_FAILED",
+            "Pull Request konnte nicht geschlossen werden.",
+            502,
+            `PR close failed (${response.status}): ${details}`
+        )
+    }
 }

@@ -1,0 +1,258 @@
+import { Actions, Button, Card, CardLink, CardText } from "chat"
+import { Client } from "@upstash/qstash"
+import { ProviderError, UserError } from "../errors/appError.js"
+import { ensureStateConnected, state } from "../types/state.js"
+import { bot } from "../server/bot.js"
+import {
+    createCopilotIssueTask,
+    findCopilotPrForIssue
+} from "./github.js"
+
+const COPILOT_PENDING_KEY = "copilot:pending:"
+const COPILOT_TASK_KEY = "copilot:task:"
+const COPILOT_PENDING_TTL_MS = 15 * 60 * 1000
+const COPILOT_POLL_DELAY_SECONDS = 45
+const COPILOT_MAX_ATTEMPTS = 20
+
+export type CopilotPendingPrompt = {
+    id: string
+    threadId: string
+    userId: string
+    prompt: string
+    createdAt: number
+}
+
+export type CopilotTask = {
+    id: string
+    threadId: string
+    userId: string
+    repoFullName: string
+    prompt: string
+    issueNumber: number
+    issueUrl: string
+    attempts: number
+    status: "waiting" | "ready" | "merged" | "rejected" | "timeout"
+    createdAt: number
+    prNumber?: number
+    prUrl?: string
+}
+
+type CopilotPollPayload = {
+    taskId: string
+}
+
+function newCopilotId(prefix: string) {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function pendingKey(id: string) {
+    return `${COPILOT_PENDING_KEY}${id}`
+}
+
+function taskKey(id: string) {
+    return `${COPILOT_TASK_KEY}${id}`
+}
+
+function requireQstashConfig() {
+    const honoUrl = process.env.HONO_URL?.trim()
+    if (!honoUrl) {
+        throw new ProviderError(
+            "qstash",
+            "HONO_URL_MISSING",
+            "Copilot-Konfiguration ist unvollständig.",
+            500,
+            "Missing HONO_URL"
+        )
+    }
+
+    const qstashToken = process.env.QSTASH_TOKEN?.trim()
+    if (!qstashToken) {
+        throw new ProviderError(
+            "qstash",
+            "QSTASH_TOKEN_MISSING",
+            "Copilot-Konfiguration ist unvollständig.",
+            500,
+            "Missing QSTASH_TOKEN"
+        )
+    }
+
+    const qstashUrl = process.env.QSTASH_URL?.trim()
+    return {
+        callbackUrl: `${honoUrl.replace(/\/+$/, "")}/api/qstash/copilot`,
+        qstashToken,
+        qstashUrl
+    }
+}
+
+export async function createCopilotPendingPrompt(input: {
+    threadId: string
+    userId: string
+    prompt: string
+}) {
+    const prompt = input.prompt.trim()
+    if (!prompt) {
+        throw new UserError("COPILOT_PROMPT_EMPTY", "Bitte gib einen Prompt für /copilot an.")
+    }
+
+    const pending: CopilotPendingPrompt = {
+        id: newCopilotId("cp_pending"),
+        threadId: input.threadId,
+        userId: input.userId,
+        prompt,
+        createdAt: Date.now()
+    }
+
+    await ensureStateConnected()
+    await state.set(pendingKey(pending.id), pending, COPILOT_PENDING_TTL_MS)
+    return pending
+}
+
+export async function getCopilotPendingPrompt(id: string) {
+    await ensureStateConnected()
+    return state.get<CopilotPendingPrompt>(pendingKey(id))
+}
+
+export async function deleteCopilotPendingPrompt(id: string) {
+    await ensureStateConnected()
+    await state.delete(pendingKey(id))
+}
+
+export async function getCopilotTask(id: string) {
+    await ensureStateConnected()
+    return state.get<CopilotTask>(taskKey(id))
+}
+
+export async function setCopilotTask(task: CopilotTask) {
+    await ensureStateConnected()
+    await state.set(taskKey(task.id), task)
+}
+
+async function scheduleCopilotPoll(payload: CopilotPollPayload, delaySeconds = COPILOT_POLL_DELAY_SECONDS) {
+    const { callbackUrl, qstashToken, qstashUrl } = requireQstashConfig()
+    const client = new Client({
+        token: qstashToken,
+        ...(qstashUrl ? { baseUrl: qstashUrl } : {})
+    })
+
+    await client.publishJSON({
+        url: callbackUrl,
+        body: payload,
+        delay: delaySeconds
+    })
+}
+
+function summarizePrBody(body: string) {
+    const trimmed = body.trim()
+    if (!trimmed) return "Keine PR-Beschreibung vorhanden."
+    return trimmed.slice(0, 350)
+}
+
+export async function startCopilotTaskFromPending(input: {
+    pending: CopilotPendingPrompt
+    repoFullName: string
+}) {
+    const taskId = newCopilotId("cp_task")
+    const issue = await createCopilotIssueTask(input.pending.userId, input.repoFullName, input.pending.prompt)
+
+    const task: CopilotTask = {
+        id: taskId,
+        threadId: input.pending.threadId,
+        userId: input.pending.userId,
+        repoFullName: input.repoFullName,
+        prompt: input.pending.prompt,
+        issueNumber: issue.issueNumber,
+        issueUrl: issue.issueUrl,
+        attempts: 0,
+        status: "waiting",
+        createdAt: Date.now()
+    }
+
+    await setCopilotTask(task)
+    await scheduleCopilotPoll({ taskId: task.id }, 20)
+    return task
+}
+
+export function parseCopilotPollPayload(value: unknown): CopilotPollPayload {
+    if (!value || typeof value !== "object") {
+        throw new UserError("COPILOT_POLL_INVALID", "Copilot-Payload ist ungültig.")
+    }
+    const payload = value as Partial<CopilotPollPayload>
+    if (!payload.taskId) {
+        throw new UserError("COPILOT_POLL_INVALID", "Copilot-Payload ist unvollständig.")
+    }
+    return { taskId: String(payload.taskId) }
+}
+
+export async function processCopilotPoll(payload: CopilotPollPayload) {
+    const task = await getCopilotTask(payload.taskId)
+    if (!task) return
+    if (task.status !== "waiting") return
+
+    const pr = await findCopilotPrForIssue(task.userId, task.repoFullName, task.issueNumber)
+    if (pr) {
+        const next: CopilotTask = {
+            ...task,
+            status: "ready",
+            prNumber: pr.number,
+            prUrl: pr.url
+        }
+        await setCopilotTask(next)
+
+        const adapter = bot.getAdapter("telegram")
+        await adapter.postMessage(
+            task.threadId,
+            Card({
+                title: "Copilot PR bereit",
+                children: [
+                    CardText(`Repo: ${task.repoFullName}`),
+                    CardText(`Issue: #${task.issueNumber}`),
+                    CardText(`PR: #${pr.number} - ${pr.title}`),
+                    CardText(`Änderungen: +${pr.additions} / -${pr.deletions} in ${pr.changedFiles} Dateien`),
+                    CardText(`Zusammenfassung: ${summarizePrBody(pr.body)}`),
+                    ...(pr.topFiles.length > 0 ? [CardText(`Dateien: ${pr.topFiles.join(", ")}`)] : []),
+                    CardLink({ url: pr.url, label: "PR öffnen" }),
+                    Actions([
+                        Button({
+                            id: "command:copilot:merge",
+                            label: "Mergen",
+                            value: `copilot merge ${task.id}`
+                        }),
+                        Button({
+                            id: "command:copilot:reject",
+                            label: "Ablehnen",
+                            value: `copilot reject ${task.id}`
+                        }),
+                        Button({
+                            id: "command:copilot:later",
+                            label: "Später",
+                            value: `copilot later ${task.id}`
+                        })
+                    ])
+                ]
+            }) as never
+        )
+        return
+    }
+
+    const attempts = task.attempts + 1
+    if (attempts >= COPILOT_MAX_ATTEMPTS) {
+        await setCopilotTask({
+            ...task,
+            attempts,
+            status: "timeout"
+        })
+
+        const adapter = bot.getAdapter("telegram")
+        await adapter.postMessage(
+            task.threadId,
+            `Copilot hat noch keinen PR erstellt. Issue: ${task.issueUrl}` as never
+        )
+        return
+    }
+
+    await setCopilotTask({
+        ...task,
+        attempts
+    })
+    await scheduleCopilotPoll({ taskId: task.id })
+}
