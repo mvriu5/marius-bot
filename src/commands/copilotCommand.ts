@@ -132,9 +132,9 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                         })
 
                         return Button({
-                            id: "command:copilot:repo",
+                            id: "c:copilot:repo",
                             label: repo.fullName,
-                            value: `copilot repo ${selection.id}`
+                            value: selection.id
                         })
                     })
                 )

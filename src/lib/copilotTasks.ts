@@ -257,19 +257,19 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
                     CardLink({ url: pr.url, label: "PR öffnen" }),
                     Actions([
                         Button({
-                            id: "command:copilot:merge",
+                            id: "c:copilot:merge",
                             label: "Mergen",
-                            value: `copilot merge ${task.id}`
+                            value: task.id
                         }),
                         Button({
-                            id: "command:copilot:reject",
+                            id: "c:copilot:reject",
                             label: "Ablehnen",
-                            value: `copilot reject ${task.id}`
+                            value: task.id
                         }),
                         Button({
-                            id: "command:copilot:later",
+                            id: "c:copilot:later",
                             label: "Später",
-                            value: `copilot later ${task.id}`
+                            value: task.id
                         })
                     ])
                 ]

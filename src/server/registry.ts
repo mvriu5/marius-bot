@@ -29,7 +29,7 @@ export const COMMAND_ENTRIES = [
         command: copilot,
         description: "Startet Copilot-Tasks und behandelt PR-Entscheidungen.",
         subcommands: ["<text>", "repo <pendingId> <owner/repo>", "merge <taskId>", "reject <taskId>", "later <taskId>"] as const,
-        actionIds: ["command:copilot:repo", "command:copilot:merge", "command:copilot:reject", "command:copilot:later"] as const
+        actionIds: ["c:copilot:repo", "c:copilot:merge", "c:copilot:reject", "c:copilot:later"] as const
     },
     {
         command: fitbit,
