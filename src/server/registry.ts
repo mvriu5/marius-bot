@@ -6,6 +6,7 @@ import { copilot } from "../commands/copilotCommand.js"
 import { fitbit } from "../commands/fitbitCommand.js"
 import { github } from "../commands/githubCommand.js"
 import { help } from "../commands/helpCommand.js"
+import { image } from "../commands/imageCommand.js"
 import { meetings } from "../commands/meetingCommand.js"
 import { news } from "../commands/newsCommand.js"
 import { remind } from "../commands/remindCommand.js"
@@ -88,6 +89,12 @@ export const COMMAND_ENTRIES = [
         command: agent,
         description: "Aktiviert den Agent-Modus oder beantwortet eine Frage.",
         subcommands: ["<frage>"] as const,
+        actionIds: [] as const
+    },
+    {
+        command: image,
+        description: "Erstellt ein KI-Bild anhand einer Beschreibung.",
+        subcommands: ["<beschreibung>"] as const,
         actionIds: [] as const
     }
 ] as const
