@@ -42,7 +42,7 @@ export function registerOAuthRoutes(app: Hono, config: OAuthRouteConfig) {
 
         try {
             await handleOAuthCallback(code, state)
-            return c.text("OK", 200)
+            return c.text(`${providerName} successfully connected.`, 200)
         } catch (error) {
             logError(`${basePath}.callback`, error)
             const httpError = toHttpError(error)

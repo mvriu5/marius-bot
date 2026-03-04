@@ -29,6 +29,10 @@ type NotionContextItem = {
     text: string
 }
 
+const AGENT_NOTION_MAX_PAGES = 8
+const AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS = 500
+const AGENT_NOTION_MAX_CONTEXT_CHARS = 6000
+
 export class NotionAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
         super("Notion", "NotionAuthorizationRequiredError", authorizationUrl)
@@ -126,6 +130,35 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
             error
         )
     }
+}
+
+async function listNotionPagesForAgent(client: Client): Promise<Array<{ id: string; title: string; url: string }>> {
+    let searchResponse: Awaited<ReturnType<Client["search"]>>
+    try {
+        searchResponse = await client.search({
+            filter: { value: "page", property: "object" },
+            sort: { direction: "descending", timestamp: "last_edited_time" },
+            page_size: 20
+        })
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error)
+        throw new ProviderError(
+            "notion",
+            "NOTION_API_ERROR",
+            "Notion Daten konnten nicht geladen werden.",
+            502,
+            `Notion search failed: ${details}`,
+            error
+        )
+    }
+
+    return searchResponse.results
+        .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
+        .map((item) => ({
+            id: item.id,
+            title: getItemTitle(item),
+            url: item.url
+        }))
 }
 
 async function getValidAccessTokenForUser(telegramUserId: string) {
@@ -270,19 +303,30 @@ export async function getNotionKnowledgeForAgent(telegramUserId: string, query: 
 
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const notion = new Client({ auth: accessToken })
-    const contextItems = await findNotionContext(notion, normalizedQuery)
+    const pages = await listNotionPagesForAgent(notion)
+    if (pages.length === 0) return "Keine Notion-Seiten gefunden."
 
-    if (contextItems.length === 0) {
-        return "Keine passenden Notion-Inhalte gefunden."
-    }
+    const contextItems: NotionContextItem[] = await Promise.all(
+        pages.slice(0, AGENT_NOTION_MAX_PAGES).map(async (page) => {
+            const excerpt = await fetchPageExcerpt(notion, page.id)
+            return {
+                title: page.title,
+                url: page.url,
+                text: truncate(excerpt || "Kein auslesbarer Textinhalt vorhanden.", AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)
+            }
+        })
+    )
 
-    const lines: string[] = []
+    const lines: string[] = [
+        "Notion-Wissenskontext (immer verfügbar):"
+    ]
     for (const [index, item] of contextItems.entries()) {
-        lines.push(`Quelle ${index + 1}: ${item.title}`)
+        lines.push(`Seite ${index + 1}: ${item.title}`)
         if (item.url) lines.push(`URL: ${item.url}`)
         lines.push(`Inhalt: ${item.text}`)
         lines.push("")
     }
 
-    return truncate(lines.join("\n").trim(), 2500)
+    lines.push(`Frage des Users: ${normalizedQuery}`)
+    return truncate(lines.join("\n").trim(), AGENT_NOTION_MAX_CONTEXT_CHARS)
 }

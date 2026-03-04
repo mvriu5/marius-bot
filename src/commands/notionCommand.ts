@@ -80,12 +80,7 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
                     title: "Notion Pages",
                     children: pages.length === 0
                         ? [CardText("Keine Notion-Seiten gefunden.")]
-                        : pages.map((page, index) =>
-                            CardLink({
-                                url: page.url,
-                                label: `${index + 1}. ${page.title}`
-                            })
-                        )
+                        : pages.map((page, index) => CardText(`${index + 1}. ${page.title}`))
                 })
             )
         } catch (error) {
