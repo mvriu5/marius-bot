@@ -134,6 +134,35 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
     }
 }
 
+async function listNotionPagesForAgent(client: Client): Promise<Array<{ id: string; title: string; url: string }>> {
+    let searchResponse: Awaited<ReturnType<Client["search"]>>
+    try {
+        searchResponse = await client.search({
+            filter: { value: "page", property: "object" },
+            sort: { direction: "descending", timestamp: "last_edited_time" },
+            page_size: 20
+        })
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error)
+        throw new ProviderError(
+            "notion",
+            "NOTION_API_ERROR",
+            "Notion Daten konnten nicht geladen werden.",
+            502,
+            `Notion search failed: ${details}`,
+            error
+        )
+    }
+
+    return searchResponse.results
+        .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
+        .map((item) => ({
+            id: item.id,
+            title: getItemTitle(item),
+            url: item.url
+        }))
+}
+
 async function getValidAccessTokenForUser(telegramUserId: string) {
     const token = await getStateValue<StoredNotionToken>(keys.tokenKey(telegramUserId))
     if (!token?.accessToken) {
