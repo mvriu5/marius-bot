@@ -9,6 +9,7 @@ import {
 
 const COPILOT_PENDING_KEY = "copilot:pending:"
 const COPILOT_TASK_KEY = "copilot:task:"
+const COPILOT_REPO_SELECTION_KEY = "copilot:repo-selection:"
 const COPILOT_PENDING_TTL_MS = 15 * 60 * 1000
 const COPILOT_POLL_DELAY_SECONDS = 45
 const COPILOT_MAX_ATTEMPTS = 20
@@ -36,6 +37,15 @@ export type CopilotTask = {
     prUrl?: string
 }
 
+export type CopilotRepoSelection = {
+    id: string
+    pendingId: string
+    threadId: string
+    userId: string
+    repoFullName: string
+    createdAt: number
+}
+
 type CopilotPollPayload = {
     taskId: string
 }
@@ -50,6 +60,10 @@ function pendingKey(id: string) {
 
 function taskKey(id: string) {
     return `${COPILOT_TASK_KEY}${id}`
+}
+
+function repoSelectionKey(id: string) {
+    return `${COPILOT_REPO_SELECTION_KEY}${id}`
 }
 
 function requireQstashConfig() {
@@ -114,6 +128,36 @@ export async function getCopilotPendingPrompt(id: string) {
 export async function deleteCopilotPendingPrompt(id: string) {
     await ensureStateConnected()
     await state.delete(pendingKey(id))
+}
+
+export async function createCopilotRepoSelection(input: {
+    pendingId: string
+    threadId: string
+    userId: string
+    repoFullName: string
+}) {
+    const selection: CopilotRepoSelection = {
+        id: newCopilotId("cp_rs"),
+        pendingId: input.pendingId,
+        threadId: input.threadId,
+        userId: input.userId,
+        repoFullName: input.repoFullName,
+        createdAt: Date.now()
+    }
+
+    await ensureStateConnected()
+    await state.set(repoSelectionKey(selection.id), selection, COPILOT_PENDING_TTL_MS)
+    return selection
+}
+
+export async function getCopilotRepoSelection(id: string) {
+    await ensureStateConnected()
+    return state.get<CopilotRepoSelection>(repoSelectionKey(id))
+}
+
+export async function deleteCopilotRepoSelection(id: string) {
+    await ensureStateConnected()
+    await state.delete(repoSelectionKey(id))
 }
 
 export async function getCopilotTask(id: string) {

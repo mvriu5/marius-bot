@@ -10,8 +10,11 @@ import {
 } from "../lib/github.js"
 import {
     createCopilotPendingPrompt,
+    createCopilotRepoSelection,
     deleteCopilotPendingPrompt,
+    deleteCopilotRepoSelection,
     getCopilotPendingPrompt,
+    getCopilotRepoSelection,
     getCopilotTask,
     setCopilotTask,
     startCopilotTaskFromPending
@@ -22,7 +25,7 @@ type CopilotAction = "start" | "repo" | "login" | "merge" | "reject" | "later"
 
 type CopilotParsedArgs =
     | { action: "start"; prompt: string }
-    | { action: "repo"; pendingId: string; repoFullName: string }
+    | { action: "repo"; selectionId: string }
     | { action: "login" }
     | { action: "merge"; taskId: string }
     | { action: "reject"; taskId: string }
@@ -38,14 +41,15 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
 
         const action = args[0]?.toLowerCase()
         if (action === "login") return { ok: true, value: { action: "login" } }
+
         if (action === "repo") {
-            const pendingId = args[1]
-            const repoFullName = args[2]
-            if (!pendingId || !repoFullName) {
-                return { ok: false, message: "Nutze /copilot repo <pendingId> <owner/repo>" }
+            const selectionId = args[1]
+            if (!selectionId) {
+                return { ok: false, message: "Nutze /copilot repo <selectionId>" }
             }
-            return { ok: true, value: { action: "repo", pendingId, repoFullName } }
+            return { ok: true, value: { action: "repo", selectionId } }
         }
+
         if (action === "merge" || action === "reject" || action === "later") {
             const taskId = args[1]
             if (!taskId) {
@@ -111,27 +115,37 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                     userId,
                     prompt: parsed.prompt
                 })
+
                 const repos = await listGithubWritableRepositories(userId, 8)
                 if (repos.length === 0) {
                     await ctx.thread.post("Keine beschreibbaren Repositories gefunden.")
                     return
                 }
 
+                const repoButtons = await Promise.all(
+                    repos.map(async (repo) => {
+                        const selection = await createCopilotRepoSelection({
+                            pendingId: pending.id,
+                            threadId: ctx.thread.id,
+                            userId,
+                            repoFullName: repo.fullName
+                        })
+
+                        return Button({
+                            id: "command:copilot:repo",
+                            label: repo.fullName,
+                            value: `copilot repo ${selection.id}`
+                        })
+                    })
+                )
+
                 await ctx.thread.post(
                     Card({
-                        title: "Copilot: Repository auswählen",
+                        title: "Copilot: Repository auswaehlen",
                         children: [
                             CardText(`Prompt: ${parsed.prompt.slice(0, 250)}`),
-                            CardText("Wähle ein Repository:"),
-                            Actions(
-                                repos.map((repo) =>
-                                    Button({
-                                        id: "command:copilot:repo",
-                                        label: repo.fullName,
-                                        value: `copilot repo ${pending.id} ${repo.fullName}`
-                                    })
-                                )
-                            )
+                            CardText("Waehle ein Repository:"),
+                            Actions(repoButtons)
                         ]
                     })
                 )
@@ -139,7 +153,13 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
             }
 
             if (parsed.action === "repo") {
-                const pending = await getCopilotPendingPrompt(parsed.pendingId)
+                const selection = await getCopilotRepoSelection(parsed.selectionId)
+                if (!selection || selection.userId !== userId || selection.threadId !== ctx.thread.id) {
+                    await ctx.thread.post("Die Repository-Auswahl ist abgelaufen. Bitte starte /copilot erneut.")
+                    return
+                }
+
+                const pending = await getCopilotPendingPrompt(selection.pendingId)
                 if (!pending || pending.userId !== userId || pending.threadId !== ctx.thread.id) {
                     await ctx.thread.post("Die Copilot-Auswahl ist abgelaufen. Bitte starte /copilot erneut.")
                     return
@@ -147,9 +167,11 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
 
                 const task = await startCopilotTaskFromPending({
                     pending,
-                    repoFullName: parsed.repoFullName
+                    repoFullName: selection.repoFullName
                 })
-                await deleteCopilotPendingPrompt(parsed.pendingId)
+
+                await deleteCopilotPendingPrompt(selection.pendingId)
+                await deleteCopilotRepoSelection(selection.id)
 
                 await ctx.thread.post(
                     Card({
@@ -158,8 +180,8 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                             CardText(`Repo: ${task.repoFullName}`),
                             CardText(`Prompt: ${task.prompt.slice(0, 250)}`),
                             CardText(`Issue #${task.issueNumber} wurde Copilot zugewiesen.`),
-                            CardLink({ url: task.issueUrl, label: "Issue öffnen" }),
-                            CardText("Ich sende dir automatisch den PR mit Merge/Ablehnen/Später-Buttons.")
+                            CardLink({ url: task.issueUrl, label: "Issue oeffnen" }),
+                            CardText("Ich sende dir automatisch den PR mit Mergen/Ablehnen/Spaeter-Buttons.")
                         ]
                     })
                 )
@@ -173,12 +195,12 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
             }
 
             if (parsed.action === "later") {
-                await ctx.thread.post("Okay, ich lasse den PR unverändert.")
+                await ctx.thread.post("Okay, ich lasse den PR unveraendert.")
                 return
             }
 
             if (!task.prNumber) {
-                await ctx.thread.post("Der PR ist noch nicht verfügbar.")
+                await ctx.thread.post("Der PR ist noch nicht verfuegbar.")
                 return
             }
 
