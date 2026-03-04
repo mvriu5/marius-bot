@@ -1,4 +1,6 @@
 import * as arctic from "arctic"
+import { Octokit } from "@octokit/rest"
+import { graphql } from "@octokit/graphql"
 import {
     AuthorizationRequiredError,
     buildOAuthRedirectUri,
@@ -16,30 +18,6 @@ import {
     isTokenValid,
     setStateValue
 } from "../oauth/oauthState.js"
-
-type GithubUser = {
-    login?: string
-}
-
-type GithubRepository = {
-    full_name?: string
-}
-
-type GithubSearchCommitsResponse = {
-    total_count?: number
-    items?: Array<{
-        repository?: GithubRepository
-    }>
-}
-
-type GithubSearchIssuesResponse = {
-    items?: Array<{
-        html_url?: string
-        title?: string
-        number?: number
-        repository_url?: string
-    }>
-}
 
 const keys = createTelegramOAuthKeys("github")
 
@@ -61,52 +39,19 @@ type GithubAssignedItem = {
     repository: string
 }
 
-type GithubUserRepo = {
-    full_name?: string
-    default_branch?: string
-    permissions?: {
-        push?: boolean
-    }
-}
-
-type GithubIssueResponse = {
-    number?: number
-    html_url?: string
-}
-
-type GithubTimelineCrossReferenceEvent = {
-    event?: string
-    source?: {
-        issue?: {
-            number?: number
-            html_url?: string
-            pull_request?: {
-                url?: string
-                html_url?: string
-            }
-        }
-    }
-}
-
-type GithubPullRequestResponse = {
-    node_id?: string
-    number?: number
-    html_url?: string
-    title?: string
-    body?: string
-    draft?: boolean
-    additions?: number
-    deletions?: number
-    changed_files?: number
-}
-
-type GithubPullRequestFile = {
-    filename?: string
-}
-
 type GithubCopilotTaskInfo = {
     issueNumber: number
     issueUrl: string
+}
+
+type TimelineCrossReferencedEvent = {
+    event: string
+    source?: {
+        issue?: {
+            number?: number
+            pull_request?: { url?: string }
+        }
+    }
 }
 
 type GithubCopilotPrInfo = {
@@ -240,71 +185,24 @@ async function getValidAccessTokenForUser(telegramUserId: string) {
     return refreshGithubToken(telegramUserId, token.refreshToken)
 }
 
-async function fetchGithubJson<T>(
-    accessToken: string,
-    path: string,
-    extraHeaders?: Record<string, string>
-): Promise<T> {
-    const response = await fetch(`https://api.github.com${path}`, {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/vnd.github+json",
-            "User-Agent": "telegram-bot",
-            ...extraHeaders
-        }
+function getOctokit(accessToken: string) {
+    return new Octokit({
+        auth: accessToken,
+        userAgent: "telegram-bot"
     })
-
-    if (!response.ok) {
-        const details = await response.text()
-        throw new ProviderError(
-            "github",
-            "GITHUB_API_ERROR",
-            "GitHub Daten konnten nicht geladen werden.",
-            502,
-            `GitHub API error (${response.status}): ${details}`
-        )
-    }
-
-    return response.json() as Promise<T>
 }
 
-async function fetchGithubGraphql<T>(
-    accessToken: string,
-    query: string,
-    variables?: Record<string, unknown>
-): Promise<T> {
-    const response = await fetch("https://api.github.com/graphql", {
-        method: "POST",
+function getGraphqlWithAuth(accessToken: string) {
+    return graphql.defaults({
         headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/vnd.github+json",
-            "User-Agent": "telegram-bot",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ query, variables })
+            authorization: `token ${accessToken}`
+        }
     })
-
-    const body = await response.json() as {
-        data?: T
-        errors?: Array<{ message?: string }>
-    }
-
-    if (!response.ok || body.errors?.length || !body.data) {
-        const details = JSON.stringify(body)
-        throw new ProviderError(
-            "github",
-            "GITHUB_GRAPHQL_ERROR",
-            "GitHub Daten konnten nicht geladen werden.",
-            502,
-            `GitHub GraphQL error (${response.status}): ${details}`
-        )
-    }
-
-    return body.data
 }
 
 async function getGithubUserLogin(accessToken: string) {
-    const me = await fetchGithubJson<GithubUser>(accessToken, "/user")
+    const octokit = getOctokit(accessToken)
+    const { data: me } = await octokit.rest.users.getAuthenticated()
     if (!me.login) {
         throw new UserError(
             "GITHUB_USER_LOGIN_MISSING",
@@ -345,18 +243,18 @@ function getStartOfTodayIso() {
 
 export async function getGithubDailyCommitStats(telegramUserId: string): Promise<GithubDailyCommitStats> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const login = await getGithubUserLogin(accessToken)
     const fromIso = getStartOfTodayIso()
 
-    const query = encodeURIComponent(`author:${login} committer-date:>=${fromIso}`)
-    const commits = await fetchGithubJson<GithubSearchCommitsResponse>(
-        accessToken,
-        `/search/commits?q=${query}&per_page=100`,
-        { Accept: "application/vnd.github.cloak-preview+json" }
-    )
+    const { data: commits } = await octokit.rest.search.commits({
+        q: `author:${login} committer-date:>=${fromIso}`,
+        per_page: 100,
+        headers: { accept: "application/vnd.github.cloak-preview+json" }
+    })
 
     const repoCounts = new Map<string, number>()
-    for (const item of commits.items ?? []) {
+    for (const item of commits.items) {
         const repo = item.repository?.full_name ?? "unknown"
         repoCounts.set(repo, (repoCounts.get(repo) ?? 0) + 1)
     }
@@ -374,16 +272,18 @@ export async function getGithubAssignedIssues(
     limit = 10
 ): Promise<GithubAssignedItem[]> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const login = await getGithubUserLogin(accessToken)
     const perPage = Math.max(1, Math.min(30, limit))
-    const query = encodeURIComponent(`assignee:${login} is:open is:issue`)
 
-    const response = await fetchGithubJson<GithubSearchIssuesResponse>(
-        accessToken,
-        `/search/issues?q=${query}&sort=updated&order=desc&per_page=${perPage}`
-    )
+    const { data: response } = await octokit.rest.search.issuesAndPullRequests({
+        q: `assignee:${login} is:open is:issue`,
+        sort: "updated",
+        order: "desc",
+        per_page: perPage
+    })
 
-    return (response.items ?? []).map((item) => ({
+    return response.items.map((item) => ({
         number: item.number ?? null,
         title: item.title ?? "Ohne Titel",
         url: item.html_url ?? "",
@@ -396,16 +296,18 @@ export async function getGithubAssignedPrs(
     limit = 10
 ): Promise<GithubAssignedItem[]> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const login = await getGithubUserLogin(accessToken)
     const perPage = Math.max(1, Math.min(30, limit))
-    const query = encodeURIComponent(`assignee:${login} is:open is:pr`)
 
-    const response = await fetchGithubJson<GithubSearchIssuesResponse>(
-        accessToken,
-        `/search/issues?q=${query}&sort=updated&order=desc&per_page=${perPage}`
-    )
+    const { data: response } = await octokit.rest.search.issuesAndPullRequests({
+        q: `assignee:${login} is:open is:pr`,
+        sort: "updated",
+        order: "desc",
+        per_page: perPage
+    })
 
-    return (response.items ?? []).map((item) => ({
+    return response.items.map((item) => ({
         number: item.number ?? null,
         title: item.title ?? "Ohne Titel",
         url: item.html_url ?? "",
@@ -418,11 +320,15 @@ export async function listGithubWritableRepositories(
     limit = 8
 ): Promise<Array<{ fullName: string; defaultBranch: string }>> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const perPage = Math.max(1, Math.min(50, limit * 3))
-    const repos = await fetchGithubJson<GithubUserRepo[]>(
-        accessToken,
-        `/user/repos?sort=updated&direction=desc&affiliation=owner,collaborator,organization_member&per_page=${perPage}`
-    )
+
+    const { data: repos } = await octokit.rest.repos.listForAuthenticatedUser({
+        sort: "updated",
+        direction: "desc",
+        affiliation: "owner,collaborator,organization_member",
+        per_page: perPage
+    })
 
     return repos
         .filter((repo) => repo.permissions?.push && repo.full_name)
@@ -439,8 +345,9 @@ export async function createCopilotIssueTask(
     prompt: string
 ): Promise<GithubCopilotTaskInfo> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const { owner, repo } = splitRepoFullName(repoFullName)
-    const repoInfo = await fetchGithubJson<GithubUserRepo>(accessToken, `/repos/${owner}/${repo}`)
+    const { data: repoInfo } = await octokit.rest.repos.get({ owner, repo })
     const baseBranch = repoInfo.default_branch || "main"
     const title = `Copilot task: ${prompt.trim().slice(0, 80) || "Task"}`
     const body = [
@@ -450,38 +357,18 @@ export async function createCopilotIssueTask(
         prompt.trim()
     ].join("\n")
 
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "telegram-bot",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            title,
-            body,
-            assignees: ["copilot-swe-agent[bot]"],
-            agent_assignment: {
-                target_repo: repoFullName,
-                base_branch: baseBranch
-            }
-        })
+    const { data: issue } = await octokit.request("POST /repos/{owner}/{repo}/issues", {
+        owner,
+        repo,
+        title,
+        body,
+        assignees: ["copilot-swe-agent[bot]"],
+        agent_assignment: {
+            target_repo: repoFullName,
+            base_branch: baseBranch
+        }
     })
 
-    if (!response.ok) {
-        const details = await response.text()
-        throw new ProviderError(
-            "github",
-            "GITHUB_COPILOT_TASK_CREATE_FAILED",
-            "Copilot Task konnte nicht gestartet werden.",
-            502,
-            `Copilot issue creation failed (${response.status}): ${details}`
-        )
-    }
-
-    const issue = await response.json() as GithubIssueResponse
     if (!issue.number || !issue.html_url) {
         throw new ProviderError(
             "github",
@@ -504,29 +391,25 @@ export async function findCopilotPrForIssue(
     issueNumber: number
 ): Promise<GithubCopilotPrInfo | null> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const { owner, repo } = splitRepoFullName(repoFullName)
-    const timeline = await fetchGithubJson<GithubTimelineCrossReferenceEvent[]>(
-        accessToken,
-        `/repos/${owner}/${repo}/issues/${issueNumber}/timeline?per_page=100`
-    )
+    const { data: timeline } = await octokit.rest.issues.listEventsForTimeline({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        per_page: 100
+    })
 
     const prNumber = timeline
         .filter((event) => event.event === "cross-referenced")
-        .map((event) => event.source?.issue)
+        .map((event) => (event as TimelineCrossReferencedEvent).source?.issue)
         .find((issue) => Boolean(issue?.pull_request?.url))
         ?.number
 
     if (!prNumber) return null
 
-    const pr = await fetchGithubJson<GithubPullRequestResponse>(
-        accessToken,
-        `/repos/${owner}/${repo}/pulls/${prNumber}`
-    )
-
-    const files = await fetchGithubJson<GithubPullRequestFile[]>(
-        accessToken,
-        `/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=20`
-    )
+    const { data: pr } = await octokit.rest.pulls.get({ owner, repo, pull_number: prNumber })
+    const { data: files } = await octokit.rest.pulls.listFiles({ owner, repo, pull_number: prNumber, per_page: 20 })
 
     if (!pr.number || !pr.html_url) return null
 
@@ -549,35 +432,21 @@ export async function mergePullRequest(
     prNumber: number
 ) {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const { owner, repo } = splitRepoFullName(repoFullName)
-    const baseHeaders = {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "telegram-bot",
-        "Content-Type": "application/json"
-    }
 
     const tryMerge = async () => {
-        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
-            method: "PUT",
-            headers: baseHeaders,
-            body: JSON.stringify({
-                merge_method: "squash"
-            })
-        })
-        return {
-            ok: response.ok,
-            status: response.status,
-            details: await response.text()
+        try {
+            await octokit.rest.pulls.merge({ owner, repo, pull_number: prNumber, merge_method: "squash" })
+            return { ok: true, status: 200, details: "" }
+        } catch (error) {
+            const err = error as { status?: number; message?: string }
+            return { ok: false, status: err.status ?? 500, details: err.message ?? String(error) }
         }
     }
 
     const setReadyForReview = async () => {
-        const pr = await fetchGithubJson<GithubPullRequestResponse>(
-            accessToken,
-            `/repos/${owner}/${repo}/pulls/${prNumber}`
-        )
+        const { data: pr } = await octokit.rest.pulls.get({ owner, repo, pull_number: prNumber })
 
         if (!pr.node_id) {
             throw new ProviderError(
@@ -590,12 +459,11 @@ export async function mergePullRequest(
         }
 
         try {
-            await fetchGithubGraphql<{
+            await getGraphqlWithAuth(accessToken)<{
                 markPullRequestReadyForReview: {
                     pullRequest: { isDraft: boolean }
                 }
             }>(
-                accessToken,
                 `mutation MarkPullRequestReadyForReview($pullRequestId: ID!) {
                     markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
                         pullRequest {
@@ -649,29 +517,7 @@ export async function closePullRequest(
     prNumber: number
 ) {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const octokit = getOctokit(accessToken)
     const { owner, repo } = splitRepoFullName(repoFullName)
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`, {
-        method: "PATCH",
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "telegram-bot",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            state: "closed"
-        })
-    })
-
-    if (!response.ok) {
-        const details = await response.text()
-        throw new ProviderError(
-            "github",
-            "GITHUB_PR_CLOSE_FAILED",
-            "Pull Request konnte nicht geschlossen werden.",
-            502,
-            `PR close failed (${response.status}): ${details}`
-        )
-    }
+    await octokit.rest.pulls.update({ owner, repo, pull_number: prNumber, state: "closed" })
 }
