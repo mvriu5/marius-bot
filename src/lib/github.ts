@@ -89,6 +89,7 @@ type GithubTimelineCrossReferenceEvent = {
 }
 
 type GithubPullRequestResponse = {
+    node_id?: string
     number?: number
     html_url?: string
     title?: string
@@ -265,6 +266,41 @@ async function fetchGithubJson<T>(
     }
 
     return response.json() as Promise<T>
+}
+
+async function fetchGithubGraphql<T>(
+    accessToken: string,
+    query: string,
+    variables?: Record<string, unknown>
+): Promise<T> {
+    const response = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/vnd.github+json",
+            "User-Agent": "telegram-bot",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ query, variables })
+    })
+
+    const body = await response.json() as {
+        data?: T
+        errors?: Array<{ message?: string }>
+    }
+
+    if (!response.ok || body.errors?.length || !body.data) {
+        const details = JSON.stringify(body)
+        throw new ProviderError(
+            "github",
+            "GITHUB_GRAPHQL_ERROR",
+            "GitHub Daten konnten nicht geladen werden.",
+            502,
+            `GitHub GraphQL error (${response.status}): ${details}`
+        )
+    }
+
+    return body.data
 }
 
 async function getGithubUserLogin(accessToken: string) {
@@ -538,19 +574,45 @@ export async function mergePullRequest(
     }
 
     const setReadyForReview = async () => {
-        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/ready_for_review`, {
-            method: "POST",
-            headers: baseHeaders
-        })
+        const pr = await fetchGithubJson<GithubPullRequestResponse>(
+            accessToken,
+            `/repos/${owner}/${repo}/pulls/${prNumber}`
+        )
 
-        if (!response.ok && response.status !== 422) {
-            const details = await response.text()
+        if (!pr.node_id) {
             throw new ProviderError(
                 "github",
                 "GITHUB_PR_READY_FOR_REVIEW_FAILED",
                 "Pull Request konnte nicht auf 'Ready for review' gesetzt werden.",
                 502,
-                `PR ready_for_review failed (${response.status}): ${details}`
+                "PR node_id missing in response"
+            )
+        }
+
+        try {
+            await fetchGithubGraphql<{
+                markPullRequestReadyForReview: {
+                    pullRequest: { isDraft: boolean }
+                }
+            }>(
+                accessToken,
+                `mutation MarkPullRequestReadyForReview($pullRequestId: ID!) {
+                    markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+                        pullRequest {
+                            isDraft
+                        }
+                    }
+                }`,
+                { pullRequestId: pr.node_id }
+            )
+        } catch (error) {
+            throw new ProviderError(
+                "github",
+                "GITHUB_PR_READY_FOR_REVIEW_FAILED",
+                "Pull Request konnte nicht auf 'Ready for review' gesetzt werden.",
+                502,
+                error instanceof Error ? error.message : String(error),
+                error
             )
         }
     }
