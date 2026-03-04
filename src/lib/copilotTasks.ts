@@ -50,8 +50,10 @@ type CopilotPollPayload = {
     taskId: string
 }
 
-function newCopilotId(prefix: string) {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+function newCopilotId(kind: "p" | "r" | "t") {
+    const ts = Date.now().toString(36)
+    const rnd = Math.random().toString(36).slice(2, 8)
+    return `${kind}${ts}${rnd}`
 }
 
 function pendingKey(id: string) {
@@ -108,7 +110,7 @@ export async function createCopilotPendingPrompt(input: {
     }
 
     const pending: CopilotPendingPrompt = {
-        id: newCopilotId("cp_pending"),
+        id: newCopilotId("p"),
         threadId: input.threadId,
         userId: input.userId,
         prompt,
@@ -137,7 +139,7 @@ export async function createCopilotRepoSelection(input: {
     repoFullName: string
 }) {
     const selection: CopilotRepoSelection = {
-        id: newCopilotId("cp_rs"),
+        id: newCopilotId("r"),
         pendingId: input.pendingId,
         threadId: input.threadId,
         userId: input.userId,
@@ -194,7 +196,7 @@ export async function startCopilotTaskFromPending(input: {
     pending: CopilotPendingPrompt
     repoFullName: string
 }) {
-    const taskId = newCopilotId("cp_task")
+    const taskId = newCopilotId("t")
     const issue = await createCopilotIssueTask(input.pending.userId, input.repoFullName, input.pending.prompt)
 
     const task: CopilotTask = {
