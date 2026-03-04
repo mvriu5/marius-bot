@@ -256,7 +256,7 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
             }),
             Button({
                 id: "c:copilot:reject",
-                label: "Ablehnen",
+                label: "Löschen",
                 value: task.id
             }),
             Button({
@@ -282,12 +282,9 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
                 title: "Copilot PR bereit",
                 children: [
                     CardText(`Repo: ${safeRepoFullName}`),
-                    CardText(`Issue: #${task.issueNumber}`),
-                    CardText(`PR: #${pr.number} - ${safePrTitle}`),
-                    CardText(prStatusLine),
+                    CardText(`PR: ${safePrTitle}`),
                     CardText(`Änderungen: +${pr.additions} / -${pr.deletions} in ${pr.changedFiles} Dateien`),
                     CardText(`Zusammenfassung: ${safeSummary}`),
-                    ...(safeTopFiles.length > 0 ? [CardText(`Dateien: ${safeTopFiles.join(", ")}`)] : []),
                     CardLink({ url: pr.url, label: "PR öffnen" }),
                     Actions(prActions)
                 ]

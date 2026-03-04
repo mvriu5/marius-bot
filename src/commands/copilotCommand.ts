@@ -182,10 +182,10 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                         title: "Copilot arbeitet",
                         children: [
                             CardText(`Repo: ${task.repoFullName}`),
-                            CardText(`Prompt: ${task.prompt.slice(0, 250)}`),
-                            CardText(`Issue #${task.issueNumber} wurde Copilot zugewiesen.`),
-                            CardLink({ url: task.issueUrl, label: "Issue oeffnen" }),
-                            CardText("Ich sende dir automatisch den PR mit Mergen/Ablehnen/Spaeter-Buttons.")
+                            CardText("Ich sschreibe dir sobald ich fertig bin."),
+                            Actions([
+                                LinkButton({ url: task.issueUrl, label: "Issue öffnen" })
+                            ])
                         ]
                     })
                 )
@@ -199,19 +199,28 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
             }
 
             if (parsed.action === "later") {
-                await ctx.thread.post("Okay, ich lasse den PR unveraendert.")
+                await ctx.thread.post("Okay, ich lasse den PR unverändert.")
                 return
             }
 
             if (!task.prNumber) {
-                await ctx.thread.post("Der PR ist noch nicht verfuegbar.")
+                await ctx.thread.post("Der PR ist noch nicht verfügbar.")
                 return
             }
 
             if (parsed.action === "merge") {
                 await mergePullRequest(userId, task.repoFullName, task.prNumber)
                 await setCopilotTask({ ...task, status: "merged" })
-                await ctx.thread.post(`PR wurde gemerged: ${task.prUrl ?? `#${task.prNumber}`}`)
+                await ctx.thread.post(
+                    Card({
+                        title: `PR #${task.prNumber} wurde erfolgreich gemerged.`,
+                        children: [
+                            ...(task.prUrl
+                                ? [Actions([LinkButton({ url: task.prUrl, label: "PR öffnen" })])]
+                                : [])
+                        ]
+                    })
+                )
                 return
             }
 

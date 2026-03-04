@@ -1,7 +1,6 @@
 import { analytics } from "../commands/analyticsCommand.js"
 import { account } from "../commands/accountCommand.js"
 import { agent } from "../commands/agentCommand.js"
-import { image } from "../commands/imageCommand.js"
 import { clear } from "../commands/clearCommand.js"
 import { copilot } from "../commands/copilotCommand.js"
 import { fitbit } from "../commands/fitbitCommand.js"
@@ -91,12 +90,6 @@ export const COMMAND_ENTRIES = [
         subcommands: ["<frage>"] as const,
         actionIds: [] as const
     },
-    {
-        command: image,
-        description: "Erstellt ein Bild anhand einer Beschreibung.",
-        subcommands: ["<beschreibung>"] as const,
-        actionIds: [] as const
-    }
 ] as const
 
 export type CommandName = typeof COMMAND_ENTRIES[number]["command"]["name"]
