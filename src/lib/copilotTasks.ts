@@ -13,6 +13,7 @@ const COPILOT_REPO_SELECTION_KEY = "copilot:repo-selection:"
 const COPILOT_PENDING_TTL_MS = 15 * 60 * 1000
 const COPILOT_POLL_DELAY_SECONDS = 45
 const COPILOT_MAX_ATTEMPTS = 20
+const COPILOT_REQUIRED_STABLE_POLLS = 5
 
 function escapeTelegramMarkdown(value: string) {
     return value
@@ -41,6 +42,8 @@ export type CopilotTask = {
     createdAt: number
     prNumber?: number
     prUrl?: string
+    lastPrHeadSha?: string
+    stablePolls?: number
 }
 
 export type CopilotRepoSelection = {
@@ -198,6 +201,15 @@ function summarizePrBody(body: string) {
     return trimmed.slice(0, 350)
 }
 
+function isCopilotPrReady(pr: {
+    additions: number
+    deletions: number
+    changedFiles: number
+}) {
+    if (pr.changedFiles > 0) return true
+    return pr.additions + pr.deletions > 0
+}
+
 export async function startCopilotTaskFromPending(input: {
     pending: CopilotPendingPrompt
     repoFullName: string
@@ -240,14 +252,42 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
     if (task.status !== "waiting") return
 
     const pr = await findCopilotPrForIssue(task.userId, task.repoFullName, task.issueNumber)
-    if (pr) {
+    if (pr && isCopilotPrReady(pr)) {
+        const stablePolls = task.lastPrHeadSha === pr.headSha ? (task.stablePolls ?? 0) + 1 : 1
+
+        if (stablePolls < COPILOT_REQUIRED_STABLE_POLLS) {
+            const attempts = task.attempts + 1
+            if (attempts >= COPILOT_MAX_ATTEMPTS) {
+                await setCopilotTask({
+                    ...task,
+                    attempts,
+                    status: "timeout",
+                    lastPrHeadSha: pr.headSha,
+                    stablePolls
+                })
+
+                const { bot } = await import("../server/bot.js")
+                const adapter = bot.getAdapter("telegram")
+                await adapter.postMessage(
+                    task.threadId,
+                    `Copilot hat den PR noch nicht finalisiert. Issue: ${task.issueUrl}` as never
+                )
+                return
+            }
+
+            await setCopilotTask({
+                ...task,
+                attempts,
+                lastPrHeadSha: pr.headSha,
+                stablePolls
+            })
+            await scheduleCopilotPoll({ taskId: task.id })
+            return
+        }
+
         const safeRepoFullName = escapeTelegramMarkdown(task.repoFullName)
         const safePrTitle = escapeTelegramMarkdown(pr.title)
         const safeSummary = escapeTelegramMarkdown(summarizePrBody(pr.body))
-        const safeTopFiles = pr.topFiles.map((file) => escapeTelegramMarkdown(file))
-        const prStatusLine = pr.isDraft
-            ? "Status: Draft (Mergen setzt ihn automatisch auf Ready for review)"
-            : "Status: Ready for review"
         const prActions = [
             Button({
                 id: "c:copilot:merge",
@@ -270,7 +310,9 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
             ...task,
             status: "ready",
             prNumber: pr.number,
-            prUrl: pr.url
+            prUrl: pr.url,
+            lastPrHeadSha: pr.headSha,
+            stablePolls
         }
         await setCopilotTask(next)
 
@@ -312,7 +354,9 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
 
     await setCopilotTask({
         ...task,
-        attempts
+        attempts,
+        stablePolls: 0,
+        lastPrHeadSha: undefined
     })
     await scheduleCopilotPoll({ taskId: task.id })
 }

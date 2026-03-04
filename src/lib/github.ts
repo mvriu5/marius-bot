@@ -59,6 +59,7 @@ type GithubCopilotPrInfo = {
     url: string
     title: string
     body: string
+    headSha: string
     isDraft: boolean
     additions: number
     deletions: number
@@ -411,13 +412,14 @@ export async function findCopilotPrForIssue(
     const { data: pr } = await octokit.rest.pulls.get({ owner, repo, pull_number: prNumber })
     const { data: files } = await octokit.rest.pulls.listFiles({ owner, repo, pull_number: prNumber, per_page: 20 })
 
-    if (!pr.number || !pr.html_url) return null
+    if (!pr.number || !pr.html_url || !pr.head?.sha) return null
 
     return {
         number: pr.number,
         url: pr.html_url,
         title: pr.title || "Ohne Titel",
         body: pr.body || "",
+        headSha: pr.head.sha,
         isDraft: Boolean(pr.draft),
         additions: pr.additions ?? 0,
         deletions: pr.deletions ?? 0,

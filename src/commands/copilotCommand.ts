@@ -182,9 +182,9 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                         title: "Copilot arbeitet",
                         children: [
                             CardText(`Repo: ${task.repoFullName}`),
-                            CardText("Ich sschreibe dir sobald ich fertig bin."),
+                            CardText("Ich schreibe dir sobald ich fertig bin."),
                             Actions([
-                                LinkButton({ url: task.issueUrl, label: "Issue öffnen" })
+                                LinkButton({ url: task.issueUrl, label: "Öffnen" })
                             ])
                         ]
                     })
@@ -216,7 +216,7 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                         title: `PR #${task.prNumber} wurde erfolgreich gemerged.`,
                         children: [
                             ...(task.prUrl
-                                ? [Actions([LinkButton({ url: task.prUrl, label: "PR öffnen" })])]
+                                ? [Actions([LinkButton({ url: task.prUrl, label: "Öffnen" })])]
                                 : [])
                         ]
                     })
@@ -226,7 +226,16 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
 
             await closePullRequest(userId, task.repoFullName, task.prNumber)
             await setCopilotTask({ ...task, status: "rejected" })
-            await ctx.thread.post(`PR wurde geschlossen: ${task.prUrl ?? `#${task.prNumber}`}`)
+            await ctx.thread.post(
+                Card({
+                    title: "PR wurde geschlossen.",
+                    children: [
+                        ...(task.prUrl
+                            ? [Actions([LinkButton({ url: task.prUrl, label: "Öffnen" })])]
+                            : [])
+                    ]
+                })
+            )
         } catch (error) {
             if (error instanceof GithubAuthorizationRequiredError) {
                 const url = await createGithubAuthorizationUrl(userId)
