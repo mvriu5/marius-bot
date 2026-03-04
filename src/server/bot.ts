@@ -87,6 +87,8 @@ bot.onAction(actionIds, async (event) => {
             author: event.user,
             text: syntheticText
         } as CommandContext["message"],
+        source: "action",
+        actionMessageId: event.messageId,
         command,
         args
     }
@@ -130,6 +132,7 @@ bot.onSubscribedMessage(async (thread, message) => {
     const ctx: CommandContext = {
         thread,
         message,
+        source: "message",
         command,
         args: trimmedText.split(/\s+/).slice(1)
     }

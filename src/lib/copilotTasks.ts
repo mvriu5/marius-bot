@@ -1,6 +1,7 @@
-import { Actions, Button, Card, CardLink, CardText } from "chat"
+import { Card, CardText } from "chat"
 import { Client } from "@upstash/qstash"
 import { ProviderError, UserError } from "../errors/appError.js"
+import { ButtonGrid } from "../components/buttonGrid.js"
 import { ensureStateConnected, state } from "../types/state.js"
 import {
     createCopilotIssueTask,
@@ -42,6 +43,7 @@ export type CopilotTask = {
     createdAt: number
     prNumber?: number
     prUrl?: string
+    prCardMessageIds?: string[]
     lastPrHeadSha?: string
     stablePolls?: number
 }
@@ -289,22 +291,11 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
         const safePrTitle = escapeTelegramMarkdown(pr.title)
         const safeSummary = escapeTelegramMarkdown(summarizePrBody(pr.body))
         const prActions = [
-            Button({
-                id: "c:copilot:merge",
-                label: "Mergen",
-                value: task.id
-            }),
-            Button({
-                id: "c:copilot:reject",
-                label: "Löschen",
-                value: task.id
-            }),
-            Button({
-                id: "c:copilot:later",
-                label: "Später",
-                value: task.id
-            })
-        ]
+            { url: pr.url, label: "PR öffnen" },
+            { id: "c:copilot:merge", label: "Mergen", value: task.id },
+            { id: "c:copilot:reject", label: "Löschen", value: task.id },
+            { id: "c:copilot:later", label: "Später", value: task.id }
+        ] as const
 
         const next: CopilotTask = {
             ...task,
@@ -318,20 +309,20 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
 
         const { bot } = await import("../server/bot.js")
         const adapter = bot.getAdapter("telegram")
-        await adapter.postMessage(
+        const postedCard = await adapter.postMessage(
             task.threadId,
             Card({
                 title: "Copilot PR bereit",
                 children: [
-                    CardText(`Repo: ${safeRepoFullName}`),
-                    CardText(`PR: ${safePrTitle}`),
-                    CardText(`Änderungen: +${pr.additions} / -${pr.deletions} in ${pr.changedFiles} Dateien`),
-                    CardText(`Zusammenfassung: ${safeSummary}`),
-                    CardLink({ url: pr.url, label: "PR öffnen" }),
-                    Actions(prActions)
+                    CardText(safeRepoFullName),
+                    CardText(safePrTitle),
+                    CardText(`+${pr.additions} / -${pr.deletions} in ${pr.changedFiles} Dateien`),
+                    ...ButtonGrid({ buttons: prActions, columns: 2 })
                 ]
             }) as never
         )
+        const prCardMessageIds = Array.from(new Set([...(next.prCardMessageIds ?? []), postedCard.id]))
+        await setCopilotTask({ ...next, prCardMessageIds })
         return
     }
 

@@ -10,6 +10,7 @@ import {
     mergePullRequest
 } from "../lib/github.js"
 import {
+    type CopilotTask,
     createCopilotPendingPrompt,
     createCopilotRepoSelection,
     deleteCopilotPendingPrompt,
@@ -31,6 +32,22 @@ type CopilotParsedArgs =
     | { action: "merge"; taskId: string }
     | { action: "reject"; taskId: string }
     | { action: "later"; taskId: string }
+
+async function deleteTrackedPrCards(task: CopilotTask, actionMessageId?: string) {
+    const ids = new Set(task.prCardMessageIds ?? [])
+    if (actionMessageId) ids.add(actionMessageId)
+    if (ids.size === 0) return
+
+    const { bot } = await import("../server/bot.js")
+    const adapter = bot.getAdapter("telegram")
+    for (const id of ids) {
+        try {
+            await adapter.deleteMessage(task.threadId, id)
+        } catch {
+            // ignore cards that are already deleted or cannot be removed
+        }
+    }
+}
 
 const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
     name: "copilot",
@@ -210,7 +227,9 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
 
             if (parsed.action === "merge") {
                 await mergePullRequest(userId, task.repoFullName, task.prNumber)
-                await setCopilotTask({ ...task, status: "merged" })
+                const actionMessageId = ctx.source === "action" ? ctx.actionMessageId : undefined
+                await deleteTrackedPrCards(task, actionMessageId)
+                await setCopilotTask({ ...task, status: "merged", prCardMessageIds: [] })
                 await ctx.thread.post(
                     Card({
                         title: `PR #${task.prNumber} wurde erfolgreich gemerged.`,
@@ -225,7 +244,9 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
             }
 
             await closePullRequest(userId, task.repoFullName, task.prNumber)
-            await setCopilotTask({ ...task, status: "rejected" })
+            const actionMessageId = ctx.source === "action" ? ctx.actionMessageId : undefined
+            await deleteTrackedPrCards(task, actionMessageId)
+            await setCopilotTask({ ...task, status: "rejected", prCardMessageIds: [] })
             await ctx.thread.post(
                 Card({
                     title: "PR wurde geschlossen.",

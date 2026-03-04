@@ -1,10 +1,8 @@
-import { Actions, Button, type CardChild } from "chat"
+import { Actions, Button, LinkButton, type CardChild } from "chat"
 
 type GridButton = {
-    id: string
     label: string
-    value?: string
-}
+} & ({ id: string; value?: string } | { url: string })
 
 function chunk<T>(arr: readonly T[], size: number): T[][] {
     const out: T[][] = []
@@ -26,11 +24,16 @@ export function ButtonGrid(opts: {
         children.push(
             Actions(
                 row.map((button) =>
-                    Button({
-                        id: button.id,
-                        label: button.label,
-                        value: button.value
-                    })
+                    "url" in button
+                        ? LinkButton({
+                              url: button.url,
+                              label: button.label
+                          })
+                        : Button({
+                              id: button.id,
+                              label: button.label,
+                              value: button.value
+                          })
                 )
             )
         )

@@ -5,6 +5,8 @@ export type RawCommandContext<
 > = {
     thread: Thread<Record<string, unknown>, unknown>
     message: Message<unknown>
+    source?: "message" | "action"
+    actionMessageId?: string
     command: Name
     args: readonly string[]
 }
