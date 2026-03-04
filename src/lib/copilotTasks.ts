@@ -44,6 +44,8 @@ export type CopilotTask = {
     prNumber?: number
     prUrl?: string
     prCardMessageIds?: string[]
+    repoSelectionMessageId?: string
+    startedMessageId?: string
     lastPrHeadSha?: string
     stablePolls?: number
 }
