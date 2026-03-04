@@ -132,35 +132,6 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
     }
 }
 
-async function listNotionPagesForAgent(client: Client): Promise<Array<{ id: string; title: string; url: string }>> {
-    let searchResponse: Awaited<ReturnType<Client["search"]>>
-    try {
-        searchResponse = await client.search({
-            filter: { value: "page", property: "object" },
-            sort: { direction: "descending", timestamp: "last_edited_time" },
-            page_size: 20
-        })
-    } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        throw new ProviderError(
-            "notion",
-            "NOTION_API_ERROR",
-            "Notion Daten konnten nicht geladen werden.",
-            502,
-            `Notion search failed: ${details}`,
-            error
-        )
-    }
-
-    return searchResponse.results
-        .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
-        .map((item) => ({
-            id: item.id,
-            title: getItemTitle(item),
-            url: item.url
-        }))
-}
-
 async function getValidAccessTokenForUser(telegramUserId: string) {
     const token = await getStateValue<StoredNotionToken>(keys.tokenKey(telegramUserId))
     if (!token?.accessToken) {
@@ -175,7 +146,7 @@ async function findNotionContext(client: Client, query: string): Promise<NotionC
     try {
         searchResponse = await client.search({
             query: query.trim(),
-            page_size: 6
+            page_size: 20
         })
     } catch (error) {
         const details = error instanceof Error ? error.message : String(error)
@@ -191,7 +162,7 @@ async function findNotionContext(client: Client, query: string): Promise<NotionC
 
     const results = searchResponse.results
         .filter((item) => isFullPageOrDataSource(item))
-        .slice(0, 4)
+        .slice(0, AGENT_NOTION_MAX_PAGES)
 
     return Promise.all(
         results.map(async (item): Promise<NotionContextItem> => {
@@ -268,30 +239,41 @@ export async function getNotionPages(telegramUserId: string): Promise<NotionPage
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const notion = new Client({ auth: accessToken })
 
-    let searchResponse: Awaited<ReturnType<Client["search"]>>
-    try {
-        searchResponse = await notion.search({
-            filter: { value: "page", property: "object" },
-            page_size: 20
-        })
-    } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        throw new ProviderError(
-            "notion",
-            "NOTION_API_ERROR",
-            "Notion Seiten konnten nicht geladen werden.",
-            502,
-            `Notion search failed: ${details}`,
-            error
-        )
-    }
+    const allPages: NotionPageItem[] = []
+    let nextCursor: string | undefined = undefined
 
-    return searchResponse.results
-        .filter((item) => isFullPageOrDataSource(item))
-        .map((item) => ({
-            title: getItemTitle(item),
-            url: item.url
-        }))
+    do {
+        let searchResponse: Awaited<ReturnType<Client["search"]>>
+        try {
+            searchResponse = await notion.search({
+                filter: { value: "page", property: "object" },
+                page_size: 100,
+                ...(nextCursor ? { start_cursor: nextCursor } : {})
+            })
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            throw new ProviderError(
+                "notion",
+                "NOTION_API_ERROR",
+                "Notion Seiten konnten nicht geladen werden.",
+                502,
+                `Notion search failed: ${details}`,
+                error
+            )
+        }
+
+        const pages = searchResponse.results
+            .filter((item) => isFullPageOrDataSource(item))
+            .map((item) => ({
+                title: getItemTitle(item),
+                url: item.url
+            }))
+        allPages.push(...pages)
+
+        nextCursor = searchResponse.has_more ? (searchResponse.next_cursor ?? undefined) : undefined
+    } while (nextCursor)
+
+    return allPages
 }
 
 export async function getNotionKnowledgeForAgent(telegramUserId: string, query: string) {
@@ -303,19 +285,8 @@ export async function getNotionKnowledgeForAgent(telegramUserId: string, query: 
 
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const notion = new Client({ auth: accessToken })
-    const pages = await listNotionPagesForAgent(notion)
-    if (pages.length === 0) return "Keine Notion-Seiten gefunden."
-
-    const contextItems: NotionContextItem[] = await Promise.all(
-        pages.slice(0, AGENT_NOTION_MAX_PAGES).map(async (page) => {
-            const excerpt = await fetchPageExcerpt(notion, page.id)
-            return {
-                title: page.title,
-                url: page.url,
-                text: truncate(excerpt || "Kein auslesbarer Textinhalt vorhanden.", AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)
-            }
-        })
-    )
+    const contextItems = await findNotionContext(notion, normalizedQuery)
+    if (contextItems.length === 0) return "Keine passenden Notion-Seiten gefunden."
 
     const lines: string[] = [
         "Notion-Wissenskontext (immer verfügbar):"
@@ -323,7 +294,7 @@ export async function getNotionKnowledgeForAgent(telegramUserId: string, query: 
     for (const [index, item] of contextItems.entries()) {
         lines.push(`Seite ${index + 1}: ${item.title}`)
         if (item.url) lines.push(`URL: ${item.url}`)
-        lines.push(`Inhalt: ${item.text}`)
+        lines.push(`Inhalt: ${truncate(item.text, AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)}`)
         lines.push("")
     }
 
