@@ -27,8 +27,8 @@ export const COMMAND_ENTRIES = [
     {
         command: fitbit,
         description: "⌚ Zeigt Fitbit-Daten und Login-Optionen.",
-        subcommands: ["login", "summary"] as const,
-        actionIds: ["command:fitbit:login", "command:fitbit:summary"] as const
+        subcommands: ["login", "summary", "activity", "week"] as const,
+        actionIds: ["command:fitbit:login", "command:fitbit:summary", "command:fitbit:activity", "command:fitbit:week"] as const
     },
     {
         command: weather,
