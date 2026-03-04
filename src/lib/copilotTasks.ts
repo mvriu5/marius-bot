@@ -14,6 +14,12 @@ const COPILOT_PENDING_TTL_MS = 15 * 60 * 1000
 const COPILOT_POLL_DELAY_SECONDS = 45
 const COPILOT_MAX_ATTEMPTS = 20
 
+function escapeTelegramMarkdown(value: string) {
+    return value
+        .replace(/\\/g, "\\\\")
+        .replace(/([_*\[\]()`])/g, "\\$1")
+}
+
 export type CopilotPendingPrompt = {
     id: string
     threadId: string
@@ -235,6 +241,11 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
 
     const pr = await findCopilotPrForIssue(task.userId, task.repoFullName, task.issueNumber)
     if (pr) {
+        const safeRepoFullName = escapeTelegramMarkdown(task.repoFullName)
+        const safePrTitle = escapeTelegramMarkdown(pr.title)
+        const safeSummary = escapeTelegramMarkdown(summarizePrBody(pr.body))
+        const safeTopFiles = pr.topFiles.map((file) => escapeTelegramMarkdown(file))
+
         const next: CopilotTask = {
             ...task,
             status: "ready",
@@ -250,12 +261,12 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
             Card({
                 title: "Copilot PR bereit",
                 children: [
-                    CardText(`Repo: ${task.repoFullName}`),
+                    CardText(`Repo: ${safeRepoFullName}`),
                     CardText(`Issue: #${task.issueNumber}`),
-                    CardText(`PR: #${pr.number} - ${pr.title}`),
+                    CardText(`PR: #${pr.number} - ${safePrTitle}`),
                     CardText(`Änderungen: +${pr.additions} / -${pr.deletions} in ${pr.changedFiles} Dateien`),
-                    CardText(`Zusammenfassung: ${summarizePrBody(pr.body)}`),
-                    ...(pr.topFiles.length > 0 ? [CardText(`Dateien: ${pr.topFiles.join(", ")}`)] : []),
+                    CardText(`Zusammenfassung: ${safeSummary}`),
+                    ...(safeTopFiles.length > 0 ? [CardText(`Dateien: ${safeTopFiles.join(", ")}`)] : []),
                     CardLink({ url: pr.url, label: "PR öffnen" }),
                     Actions([
                         Button({
