@@ -12,7 +12,8 @@ import {
     CommandContext,
     getCommand,
     HELP_ACTION_IDS,
-    isValidCommand
+    isValidCommand,
+    resolveCommandName
 } from "./registry.js"
 import { parseActionToCommand } from "../lib/utils.js"
 import { postThreadError } from "../errors/errorOutput.js"
@@ -123,9 +124,10 @@ bot.onSubscribedMessage(async (thread, message) => {
         return
     }
 
-    const command = cmdToken.replace(/^\/+/, "")
-    if (!isValidCommand(command)) {
-        await thread.post(`Unbekannter Befehl: ${command}. /help für eine Liste der verfügbaren Befehle.`)
+    const commandInput = cmdToken.replace(/^\/+/, "")
+    const command = resolveCommandName(commandInput)
+    if (!command) {
+        await thread.post(`Unbekannter Befehl: ${commandInput}. /help für eine Liste der verfügbaren Befehle.`)
         return
     }
 

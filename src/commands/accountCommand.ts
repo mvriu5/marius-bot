@@ -39,9 +39,9 @@ const accountCommand: CommandDefinition<"account", {}> = {
                 Card({
                     title: "Account Verbindungen",
                     children: [
-                        CardText(statusLines.join("\n")),
                         ...(availableLoginButtons.length > 0
                             ? [
+                                CardText(statusLines.join("\n")),
                                 CardText("Nicht verbundene Dienste:"),
                                 Actions(availableLoginButtons)
                             ]
