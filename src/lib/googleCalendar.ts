@@ -219,7 +219,8 @@ function formatEventTime(event: GoogleCalendarEvent) {
 
     const formatter = new Intl.DateTimeFormat("de-DE", {
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
+        timeZone: "Europe/Berlin"
     })
 
     const start = formatter.format(new Date(startDateTime))
@@ -235,7 +236,7 @@ async function fetchTodayEvents(accessToken: string) {
         singleEvents: "true",
         orderBy: "startTime",
         maxResults: "15",
-        timeZone: process.env.GOOGLE_CALENDAR_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone
+        timeZone: "Europe/Berlin"
     })
 
     const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {

@@ -95,27 +95,32 @@ export async function runDailyBriefing() {
         recipients += 1
 
         const adapter = bot.getAdapter("telegram")
+        const createMessageIterator = () => ({
+            [Symbol.asyncIterator]() {
+                async function* gen() {
+                    let cursor: string | undefined
+                    while (true) {
+                        const result = await adapter.fetchMessages(threadId, { direction: "forward", cursor })
+                        for (const msg of result.messages) {
+                            yield msg
+                        }
+                        if (!result.nextCursor) break
+                        cursor = result.nextCursor
+                    }
+                }
+                return gen()
+            }
+        })
 
         const thread = {
             id: threadId,
             post: async (msg: unknown) => {
                 await adapter.postMessage(threadId, msg as never)
             },
-            allMessages: {
-                [Symbol.asyncIterator]() {
-                    async function* gen() {
-                        let cursor: string | undefined
-                        while (true) {
-                            const result = await adapter.fetchMessages(threadId, { direction: "forward", cursor })
-                            for (const msg of result.messages) {
-                                yield msg
-                            }
-                            if (!result.nextCursor) break
-                            cursor = result.nextCursor
-                        }
-                    }
-                    return gen()
-                }
+            allMessages: createMessageIterator(),
+            channel: {
+                id: threadId,
+                messages: createMessageIterator()
             },
             createSentMessageFromMessage: (msg: Message<unknown>) => ({
                 ...msg,

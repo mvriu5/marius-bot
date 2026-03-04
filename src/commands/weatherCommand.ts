@@ -66,7 +66,7 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
                     title: `🌈 Wetter (${summary.locationLabel})`,
                     children: [
                         CardText(`${summary.conditionEmoji} Zustand: ${summary.condition}`),
-                        CardText(`✨ Jetzt: ${formatTemp(summary.temperatureC)} (gefuehlt ${formatTemp(summary.apparentTemperatureC)})`),
+                        CardText(`✨ Jetzt: ${formatTemp(summary.temperatureC)} (gefühlt ${formatTemp(summary.apparentTemperatureC)})`),
                         CardText(`💨 Wind: ${summary.windSpeedKmh ?? "n/a"} km/h`),
                         CardText(`🔥 Heute min/max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
                         CardText(`💧 Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`)
