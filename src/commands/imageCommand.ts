@@ -22,7 +22,7 @@ const imageCommand: CommandDefinition<"image", ImageParsedArgs> = {
             await ctx.thread.startTyping()
 
             const result = await generateImage({
-                model: openai.image("dall-e-3"),
+                model: openai.image("gpt-image-1"),
                 prompt: ctx.parsedArgs.prompt
             })
 
