@@ -93,6 +93,7 @@ type GithubPullRequestResponse = {
     html_url?: string
     title?: string
     body?: string
+    draft?: boolean
     additions?: number
     deletions?: number
     changed_files?: number
@@ -112,6 +113,7 @@ type GithubCopilotPrInfo = {
     url: string
     title: string
     body: string
+    isDraft: boolean
     additions: number
     deletions: number
     changedFiles: number
@@ -497,6 +499,7 @@ export async function findCopilotPrForIssue(
         url: pr.html_url,
         title: pr.title || "Ohne Titel",
         body: pr.body || "",
+        isDraft: Boolean(pr.draft),
         additions: pr.additions ?? 0,
         deletions: pr.deletions ?? 0,
         changedFiles: pr.changed_files ?? files.length,
@@ -511,30 +514,71 @@ export async function mergePullRequest(
 ) {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const { owner, repo } = splitRepoFullName(repoFullName)
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
-        method: "PUT",
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "telegram-bot",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            merge_method: "squash"
-        })
-    })
+    const baseHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "telegram-bot",
+        "Content-Type": "application/json"
+    }
 
-    if (!response.ok) {
-        const details = await response.text()
+    const tryMerge = async () => {
+        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
+            method: "PUT",
+            headers: baseHeaders,
+            body: JSON.stringify({
+                merge_method: "squash"
+            })
+        })
+        return {
+            ok: response.ok,
+            status: response.status,
+            details: await response.text()
+        }
+    }
+
+    const setReadyForReview = async () => {
+        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/ready_for_review`, {
+            method: "POST",
+            headers: baseHeaders
+        })
+
+        if (!response.ok && response.status !== 422) {
+            const details = await response.text()
+            throw new ProviderError(
+                "github",
+                "GITHUB_PR_READY_FOR_REVIEW_FAILED",
+                "Pull Request konnte nicht auf 'Ready for review' gesetzt werden.",
+                502,
+                `PR ready_for_review failed (${response.status}): ${details}`
+            )
+        }
+    }
+
+    const firstMerge = await tryMerge()
+    if (firstMerge.ok) return
+
+    if (firstMerge.status === 405 && /still a draft/i.test(firstMerge.details)) {
+        await setReadyForReview()
+        const secondMerge = await tryMerge()
+        if (secondMerge.ok) return
+
         throw new ProviderError(
             "github",
             "GITHUB_PR_MERGE_FAILED",
             "Pull Request konnte nicht gemerged werden.",
             502,
-            `PR merge failed (${response.status}): ${details}`
+            `PR merge failed after ready_for_review (${secondMerge.status}): ${secondMerge.details}`
         )
     }
+
+    throw new ProviderError(
+        "github",
+        "GITHUB_PR_MERGE_FAILED",
+        "Pull Request konnte nicht gemerged werden.",
+        502,
+        `PR merge failed (${firstMerge.status}): ${firstMerge.details}`
+    )
 }
 
 export async function closePullRequest(

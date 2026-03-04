@@ -245,6 +245,26 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
         const safePrTitle = escapeTelegramMarkdown(pr.title)
         const safeSummary = escapeTelegramMarkdown(summarizePrBody(pr.body))
         const safeTopFiles = pr.topFiles.map((file) => escapeTelegramMarkdown(file))
+        const prStatusLine = pr.isDraft
+            ? "Status: Draft (Mergen setzt ihn automatisch auf Ready for review)"
+            : "Status: Ready for review"
+        const prActions = [
+            Button({
+                id: "c:copilot:merge",
+                label: "Mergen",
+                value: task.id
+            }),
+            Button({
+                id: "c:copilot:reject",
+                label: "Ablehnen",
+                value: task.id
+            }),
+            Button({
+                id: "c:copilot:later",
+                label: "Später",
+                value: task.id
+            })
+        ]
 
         const next: CopilotTask = {
             ...task,
@@ -264,27 +284,12 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
                     CardText(`Repo: ${safeRepoFullName}`),
                     CardText(`Issue: #${task.issueNumber}`),
                     CardText(`PR: #${pr.number} - ${safePrTitle}`),
+                    CardText(prStatusLine),
                     CardText(`Änderungen: +${pr.additions} / -${pr.deletions} in ${pr.changedFiles} Dateien`),
                     CardText(`Zusammenfassung: ${safeSummary}`),
                     ...(safeTopFiles.length > 0 ? [CardText(`Dateien: ${safeTopFiles.join(", ")}`)] : []),
                     CardLink({ url: pr.url, label: "PR öffnen" }),
-                    Actions([
-                        Button({
-                            id: "c:copilot:merge",
-                            label: "Mergen",
-                            value: task.id
-                        }),
-                        Button({
-                            id: "c:copilot:reject",
-                            label: "Ablehnen",
-                            value: task.id
-                        }),
-                        Button({
-                            id: "c:copilot:later",
-                            label: "Später",
-                            value: task.id
-                        })
-                    ])
+                    Actions(prActions)
                 ]
             }) as never
         )
