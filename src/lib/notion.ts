@@ -29,9 +29,11 @@ type NotionContextItem = {
     text: string
 }
 
-const AGENT_NOTION_MAX_PAGES = 8
+const AGENT_NOTION_MAX_PAGES = 20
 const AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS = 500
 const AGENT_NOTION_MAX_CONTEXT_CHARS = 6000
+const AGENT_NOTION_SEARCH_MAX_RESULTS = 6
+const AGENT_NOTION_QUERY_CONTEXT_ITEMS = 5
 
 export class NotionAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
@@ -175,7 +177,7 @@ async function findNotionContext(client: Client, query: string): Promise<NotionC
     try {
         searchResponse = await client.search({
             query: query.trim(),
-            page_size: 6
+            page_size: AGENT_NOTION_SEARCH_MAX_RESULTS
         })
     } catch (error) {
         const details = error instanceof Error ? error.message : String(error)
@@ -191,7 +193,7 @@ async function findNotionContext(client: Client, query: string): Promise<NotionC
 
     const results = searchResponse.results
         .filter((item) => isFullPageOrDataSource(item))
-        .slice(0, 4)
+        .slice(0, AGENT_NOTION_QUERY_CONTEXT_ITEMS)
 
     return Promise.all(
         results.map(async (item): Promise<NotionContextItem> => {
@@ -207,6 +209,36 @@ async function findNotionContext(client: Client, query: string): Promise<NotionC
             }
         })
     )
+}
+
+function createNotionAgentContext(items: NotionContextItem[], normalizedQuery: string) {
+    const lines: string[] = ["Notion-Wissenskontext (relevant zur User-Frage):"]
+    let currentLength = lines[0].length
+
+    for (const [index, item] of items.entries()) {
+        const sectionLines = [
+            `Treffer ${index + 1}: ${item.title}`,
+            item.url ? `URL: ${item.url}` : "",
+            `Inhalt: ${item.text}`,
+            ""
+        ].filter(Boolean)
+        const sectionText = sectionLines.join("\n")
+        const additionalLength = sectionText.length + 1
+
+        if (currentLength + additionalLength > AGENT_NOTION_MAX_CONTEXT_CHARS) {
+            break
+        }
+
+        lines.push(sectionText)
+        currentLength += additionalLength
+    }
+
+    const queryLine = `Frage des Users: ${normalizedQuery}`
+    if (currentLength + queryLine.length + 1 <= AGENT_NOTION_MAX_CONTEXT_CHARS) {
+        lines.push(queryLine)
+    }
+
+    return lines.join("\n").trim()
 }
 
 export async function isNotionConnected(telegramUserId: string) {
@@ -303,30 +335,24 @@ export async function getNotionKnowledgeForAgent(telegramUserId: string, query: 
 
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const notion = new Client({ auth: accessToken })
-    const pages = await listNotionPagesForAgent(notion)
-    if (pages.length === 0) return "Keine Notion-Seiten gefunden."
+    let contextItems = await findNotionContext(notion, normalizedQuery)
 
-    const contextItems: NotionContextItem[] = await Promise.all(
-        pages.slice(0, AGENT_NOTION_MAX_PAGES).map(async (page) => {
-            const excerpt = await fetchPageExcerpt(notion, page.id)
-            return {
-                title: page.title,
-                url: page.url,
-                text: truncate(excerpt || "Kein auslesbarer Textinhalt vorhanden.", AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)
-            }
-        })
-    )
+    if (contextItems.length === 0) {
+        const pages = await listNotionPagesForAgent(notion)
+        if (pages.length === 0) return "Keine Notion-Seiten gefunden."
 
-    const lines: string[] = [
-        "Notion-Wissenskontext (immer verfügbar):"
-    ]
-    for (const [index, item] of contextItems.entries()) {
-        lines.push(`Seite ${index + 1}: ${item.title}`)
-        if (item.url) lines.push(`URL: ${item.url}`)
-        lines.push(`Inhalt: ${item.text}`)
-        lines.push("")
+        contextItems = await Promise.all(
+            pages.slice(0, AGENT_NOTION_MAX_PAGES).map(async (page) => {
+                const excerpt = await fetchPageExcerpt(notion, page.id)
+                return {
+                    title: page.title,
+                    url: page.url,
+                    text: truncate(excerpt || "Kein auslesbarer Textinhalt vorhanden.", AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)
+                }
+            })
+        )
     }
 
-    lines.push(`Frage des Users: ${normalizedQuery}`)
-    return truncate(lines.join("\n").trim(), AGENT_NOTION_MAX_CONTEXT_CHARS)
+    return createNotionAgentContext(contextItems, normalizedQuery)
 }
+

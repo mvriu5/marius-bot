@@ -61,17 +61,22 @@ export async function postAgentReply(
         }))
 
     let notionContext: string | null = null
+    let notionContextNotice: string | null = null
     if (sourceMessage?.author.userId) {
         try {
             notionContext = await getNotionKnowledgeForAgent(sourceMessage.author.userId, question)
         } catch (error) {
             const details = error instanceof Error ? error.message : String(error)
             console.info("[notion.context] skipped", { reason: details })
+            notionContextNotice = "Hinweis: Notion-Kontext konnte diesmal nicht geladen werden."
         }
     }
 
     const answer = await askAgent(question, history, notionContext ?? undefined)
-    const renderedText = renderEmojiTokens(answer.text)
+    const answerText = notionContextNotice
+        ? `${notionContextNotice}\n\n${answer.text}`
+        : answer.text
+    const renderedText = renderEmojiTokens(answerText)
     const urls = extractUrls(renderedText)
     const choices = extractTwoChoices(renderedText)
 
