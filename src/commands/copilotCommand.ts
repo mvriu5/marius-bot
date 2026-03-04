@@ -1,5 +1,6 @@
-import { Actions, Button, Card, CardLink, CardText, LinkButton } from "chat"
+import { Actions, Card, CardLink, CardText, LinkButton } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
+import { ButtonGrid } from "../components/buttonGrid.js"
 import {
     closePullRequest,
     createGithubAuthorizationUrl,
@@ -131,21 +132,24 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                             repoFullName: repo.fullName
                         })
 
-                        return Button({
+                        return {
                             id: "c:copilot:repo",
                             label: repo.fullName,
                             value: selection.id
-                        })
+                        }
                     })
                 )
 
                 await ctx.thread.post(
                     Card({
-                        title: "Copilot: Repository auswaehlen",
+                        title: "Copilot: Repository auswählen",
                         children: [
                             CardText(`Prompt: ${parsed.prompt.slice(0, 250)}`),
-                            CardText("Waehle ein Repository:"),
-                            Actions(repoButtons)
+                            CardText("Wähle ein Repository:"),
+                            ...ButtonGrid({
+                                buttons: repoButtons,
+                                columns: 1
+                            })
                         ]
                     })
                 )
