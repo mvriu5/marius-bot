@@ -7,6 +7,7 @@ import { registerTelegramRoutes } from "./routes/telegramRoute.js"
 import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./lib/fitbit.js"
 import { createGoogleAuthorizationUrl, handleGoogleOAuthCallback } from "./lib/googleCalendar.js"
 import { createGithubAuthorizationUrl, handleGithubOAuthCallback } from "./lib/github.js"
+import { createNotionAuthorizationUrl, handleNotionOAuthCallback } from "./lib/notion.js"
 
 const app = new Hono()
 
@@ -32,6 +33,12 @@ registerOAuthRoutes(app, {
     basePath: "github",
     createAuthorizationUrl: createGithubAuthorizationUrl,
     handleOAuthCallback: handleGithubOAuthCallback
+})
+registerOAuthRoutes(app, {
+    providerName: "Notion",
+    basePath: "notion",
+    createAuthorizationUrl: createNotionAuthorizationUrl,
+    handleOAuthCallback: handleNotionOAuthCallback
 })
 
 export default app

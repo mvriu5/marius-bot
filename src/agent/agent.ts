@@ -18,7 +18,11 @@ function parseAgentOutput(raw: string): AgentAnswer {
     }
 }
 
-export async function askAgent(question: string, history: ModelMessage[] = []): Promise<AgentAnswer> {
+export async function askAgent(
+    question: string,
+    history: ModelMessage[] = [],
+    externalContext?: string
+): Promise<AgentAnswer> {
     const availableEmojiNames = Object.keys(emoji).join(", ")
     const agent = new ToolLoopAgent({
         model: openai("gpt-5-nano"),
@@ -33,10 +37,18 @@ export async function askAgent(question: string, history: ModelMessage[] = []): 
         tools: {}
     })
 
-    const messages: ModelMessage[] = [
-        ...history,
-        { role: "user", content: question }
-    ]
+    const messages: ModelMessage[] = [...history, { role: "user", content: question }]
+
+    if (externalContext?.trim()) {
+        messages.unshift({
+            role: "system",
+            content: [
+                "Zusatzkontext aus Notion (nutze ihn nur, wenn er zur Frage passt):",
+                externalContext.trim(),
+                "Wenn die Information darin nicht ausreicht, sage das offen."
+            ].join("\n\n")
+        })
+    }
 
     const result = await agent.generate({ messages })
 

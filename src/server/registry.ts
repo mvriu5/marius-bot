@@ -8,6 +8,7 @@ import { github } from "../commands/githubCommand.js"
 import { help } from "../commands/helpCommand.js"
 import { meetings } from "../commands/meetingCommand.js"
 import { news } from "../commands/newsCommand.js"
+import { notion } from "../commands/notionCommand.js"
 import { remind } from "../commands/remindCommand.js"
 import { weather } from "../commands/weatherCommand.js"
 import { type RawCommandContext as BaseCommandContext } from "../types/command.js"
@@ -77,6 +78,12 @@ export const COMMAND_ENTRIES = [
             "command:github:issues",
             "command:github:prs"
         ] as const
+    },
+    {
+        command: notion,
+        description: "Verbindet Notion.",
+        subcommands: ["login"] as const,
+        actionIds: ["command:notion:login"] as const
     },
     {
         command: analytics,

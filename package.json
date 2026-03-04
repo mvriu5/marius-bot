@@ -9,6 +9,7 @@
     "@ai-sdk/openai": "^3.0.37",
     "@chat-adapter/state-redis": "^4.15.0",
     "@chat-adapter/telegram": "^4.15.0",
+    "@notionhq/client": "^5.11.1",
     "@octokit/graphql": "^9.0.3",
     "@octokit/rest": "^22.0.1",
     "@upstash/qstash": "^2.9.0",

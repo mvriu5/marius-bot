@@ -2,6 +2,7 @@ import { Actions, Button, Card, CardText, LinkButton, emoji, type EmojiValue, ty
 import type { ModelMessage } from "ai"
 import { askAgent } from "./agent.js"
 import { extractTwoChoices } from "./choice.js"
+import { getNotionKnowledgeForAgent } from "../lib/notion.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
 
@@ -59,7 +60,17 @@ export async function postAgentReply(
             content: msg.text.trim()
         }))
 
-    const answer = await askAgent(question, history)
+    let notionContext: string | null = null
+    if (sourceMessage?.author.userId) {
+        try {
+            notionContext = await getNotionKnowledgeForAgent(sourceMessage.author.userId, question)
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            console.info("[notion.context] skipped", { reason: details })
+        }
+    }
+
+    const answer = await askAgent(question, history, notionContext ?? undefined)
     const renderedText = renderEmojiTokens(answer.text)
     const urls = extractUrls(renderedText)
     const choices = extractTwoChoices(renderedText)
