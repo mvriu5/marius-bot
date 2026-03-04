@@ -2,7 +2,6 @@ import { Actions, Button, Card, CardLink, CardText } from "chat"
 import { Client } from "@upstash/qstash"
 import { ProviderError, UserError } from "../errors/appError.js"
 import { ensureStateConnected, state } from "../types/state.js"
-import { bot } from "../server/bot.js"
 import {
     createCopilotIssueTask,
     findCopilotPrForIssue
@@ -198,6 +197,7 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
         }
         await setCopilotTask(next)
 
+        const { bot } = await import("../server/bot.js")
         const adapter = bot.getAdapter("telegram")
         await adapter.postMessage(
             task.threadId,
@@ -242,6 +242,7 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
             status: "timeout"
         })
 
+        const { bot } = await import("../server/bot.js")
         const adapter = bot.getAdapter("telegram")
         await adapter.postMessage(
             task.threadId,
