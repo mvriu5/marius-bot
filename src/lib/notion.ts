@@ -134,35 +134,6 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
     }
 }
 
-async function listNotionPagesForAgent(client: Client): Promise<Array<{ id: string; title: string; url: string }>> {
-    let searchResponse: Awaited<ReturnType<Client["search"]>>
-    try {
-        searchResponse = await client.search({
-            filter: { value: "page", property: "object" },
-            sort: { direction: "descending", timestamp: "last_edited_time" },
-            page_size: 20
-        })
-    } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        throw new ProviderError(
-            "notion",
-            "NOTION_API_ERROR",
-            "Notion Daten konnten nicht geladen werden.",
-            502,
-            `Notion search failed: ${details}`,
-            error
-        )
-    }
-
-    return searchResponse.results
-        .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
-        .map((item) => ({
-            id: item.id,
-            title: getItemTitle(item),
-            url: item.url
-        }))
-}
-
 async function getValidAccessTokenForUser(telegramUserId: string) {
     const token = await getStateValue<StoredNotionToken>(keys.tokenKey(telegramUserId))
     if (!token?.accessToken) {
@@ -300,30 +271,41 @@ export async function getNotionPages(telegramUserId: string): Promise<NotionPage
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const notion = new Client({ auth: accessToken })
 
-    let searchResponse: Awaited<ReturnType<Client["search"]>>
-    try {
-        searchResponse = await notion.search({
-            filter: { value: "page", property: "object" },
-            page_size: 20
-        })
-    } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        throw new ProviderError(
-            "notion",
-            "NOTION_API_ERROR",
-            "Notion Seiten konnten nicht geladen werden.",
-            502,
-            `Notion search failed: ${details}`,
-            error
-        )
-    }
+    const allPages: NotionPageItem[] = []
+    let nextCursor: string | undefined = undefined
 
-    return searchResponse.results
-        .filter((item) => isFullPageOrDataSource(item))
-        .map((item) => ({
-            title: getItemTitle(item),
-            url: item.url
-        }))
+    do {
+        let searchResponse: Awaited<ReturnType<Client["search"]>>
+        try {
+            searchResponse = await notion.search({
+                filter: { value: "page", property: "object" },
+                page_size: 100,
+                ...(nextCursor ? { start_cursor: nextCursor } : {})
+            })
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            throw new ProviderError(
+                "notion",
+                "NOTION_API_ERROR",
+                "Notion Seiten konnten nicht geladen werden.",
+                502,
+                `Notion search failed: ${details}`,
+                error
+            )
+        }
+
+        const pages = searchResponse.results
+            .filter((item) => isFullPageOrDataSource(item))
+            .map((item) => ({
+                title: getItemTitle(item),
+                url: item.url
+            }))
+        allPages.push(...pages)
+
+        nextCursor = searchResponse.has_more ? (searchResponse.next_cursor ?? undefined) : undefined
+    } while (nextCursor)
+
+    return allPages
 }
 
 export async function getNotionKnowledgeForAgent(telegramUserId: string, query: string) {
@@ -355,4 +337,3 @@ export async function getNotionKnowledgeForAgent(telegramUserId: string, query: 
 
     return createNotionAgentContext(contextItems, normalizedQuery)
 }
-
