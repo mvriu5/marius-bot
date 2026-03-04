@@ -1,9 +1,9 @@
-import { Actions, Card, CardText, LinkButton, type Thread } from "chat"
+import { Actions, Button, Card, CardLink, CardText, LinkButton, type Thread } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
-import { createNotionAuthorizationUrl, isNotionConnected } from "../lib/notion.js"
+import { NotionAuthorizationRequiredError, createNotionAuthorizationUrl, getNotionPages, isNotionConnected } from "../lib/notion.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
-type NotionAction = "menu" | "login"
+type NotionAction = "menu" | "login" | "pages"
 type NotionParsedArgs = {
     action: NotionAction
 }
@@ -30,7 +30,7 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
     parseArgs: (args) => {
         const action = args[0]
         if (!action) return { ok: true, value: { action: "menu" as const } }
-        if (action === "login") return { ok: true, value: { action } }
+        if (action === "login" || action === "pages") return { ok: true, value: { action } }
         return { ok: false, message: "Unbekannter Notion-Subcommand" }
     },
     execute: async (ctx) => {
@@ -53,18 +53,47 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
                 Card({
                     title: "Notion",
                     children: [
-                        CardText("Notion ist verbunden."),
+                        CardText("Wähle ein Subcommand:"),
+                        Actions([
+                            Button({ id: "command:notion:pages", label: "Pages", value: "notion pages" })
+                        ])
                     ]
                 })
             )
             return
         }
 
+        if (action === "login") {
+            try {
+                const authorizationUrl = await createNotionAuthorizationUrl(userId)
+                await postNotionLoginCard(ctx.thread, authorizationUrl, "Bitte verbinde Notion hier:")
+            } catch (error) {
+                await postThreadError(ctx.thread, error, "Notion Login konnte nicht gestartet werden")
+            }
+            return
+        }
+
         try {
-            const authorizationUrl = await createNotionAuthorizationUrl(userId)
-            await postNotionLoginCard(ctx.thread, authorizationUrl, "Bitte verbinde Notion hier:")
+            const pages = await getNotionPages(userId)
+            await ctx.thread.post(
+                Card({
+                    title: "Notion Pages",
+                    children: pages.length === 0
+                        ? [CardText("Keine Notion-Seiten gefunden.")]
+                        : pages.map((page, index) =>
+                            CardLink({
+                                url: page.url,
+                                label: `${index + 1}. ${page.title}`
+                            })
+                        )
+                })
+            )
         } catch (error) {
-            await postThreadError(ctx.thread, error, "Notion Login konnte nicht gestartet werden")
+            if (error instanceof NotionAuthorizationRequiredError) {
+                await postNotionLoginCard(ctx.thread, error.authorizationUrl)
+                return
+            }
+            await postThreadError(ctx.thread, error, "Notion Pages konnten nicht geladen werden")
         }
     }
 }

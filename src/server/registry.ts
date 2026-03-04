@@ -81,9 +81,9 @@ export const COMMAND_ENTRIES = [
     },
     {
         command: notion,
-        description: "Verbindet Notion.",
-        subcommands: ["login"] as const,
-        actionIds: ["command:notion:login"] as const
+        description: "Verwaltet Notion-Integration (Login, Seitenauflistung).",
+        subcommands: ["login", "pages"] as const,
+        actionIds: ["command:notion:login", "command:notion:pages"] as const
     },
     {
         command: analytics,

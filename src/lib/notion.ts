@@ -226,6 +226,41 @@ export async function handleNotionOAuthCallback(code: string, stateId: string) {
     return { telegramUserId: oauthState.telegramUserId }
 }
 
+export type NotionPageItem = {
+    title: string
+    url: string
+}
+
+export async function getNotionPages(telegramUserId: string): Promise<NotionPageItem[]> {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const notion = new Client({ auth: accessToken })
+
+    let searchResponse: Awaited<ReturnType<Client["search"]>>
+    try {
+        searchResponse = await notion.search({
+            filter: { value: "page", property: "object" },
+            page_size: 20
+        })
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error)
+        throw new ProviderError(
+            "notion",
+            "NOTION_API_ERROR",
+            "Notion Seiten konnten nicht geladen werden.",
+            502,
+            `Notion search failed: ${details}`,
+            error
+        )
+    }
+
+    return searchResponse.results
+        .filter((item) => isFullPageOrDataSource(item))
+        .map((item) => ({
+            title: getItemTitle(item),
+            url: item.url
+        }))
+}
+
 export async function getNotionKnowledgeForAgent(telegramUserId: string, query: string) {
     const normalizedQuery = query.trim()
     if (!normalizedQuery) return null
