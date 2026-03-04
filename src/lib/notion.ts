@@ -29,11 +29,19 @@ type NotionContextItem = {
     text: string
 }
 
-const AGENT_NOTION_MAX_PAGES = 20
 const AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS = 500
 const AGENT_NOTION_MAX_CONTEXT_CHARS = 6000
-const AGENT_NOTION_SEARCH_MAX_RESULTS = 6
-const AGENT_NOTION_QUERY_CONTEXT_ITEMS = 5
+const AGENT_NOTION_SEARCH_TOP_K = 80
+const AGENT_NOTION_RERANK_TOP_N = 60
+const AGENT_NOTION_QUERY_CONTEXT_ITEMS = 8
+const AGENT_NOTION_SCORE_THRESHOLD = 0.65
+const AGENT_NOTION_MMR_LAMBDA = 0.75
+
+type NotionPageCandidate = {
+    id: string
+    title: string
+    url: string
+}
 
 export class NotionAuthorizationRequiredError extends AuthorizationRequiredError {
     constructor(authorizationUrl: string) {
@@ -120,7 +128,7 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
             .filter(Boolean)
             .slice(0, 8)
 
-        return truncate(lines.join("\n"), 700)
+        return truncate(lines.join("\n"), AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)
     } catch (error) {
         const details = error instanceof Error ? error.message : String(error)
         throw new ProviderError(
@@ -134,33 +142,135 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
     }
 }
 
-async function listNotionPagesForAgent(client: Client): Promise<Array<{ id: string; title: string; url: string }>> {
-    let searchResponse: Awaited<ReturnType<Client["search"]>>
-    try {
-        searchResponse = await client.search({
-            filter: { value: "page", property: "object" },
-            sort: { direction: "descending", timestamp: "last_edited_time" },
-            page_size: 20
-        })
-    } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        throw new ProviderError(
-            "notion",
-            "NOTION_API_ERROR",
-            "Notion Daten konnten nicht geladen werden.",
-            502,
-            `Notion search failed: ${details}`,
-            error
-        )
+function tokenize(input: string): string[] {
+    return input
+        .toLowerCase()
+        .split(/[^a-z0-9äöüß]+/i)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2)
+}
+
+function tokenOverlap(left: string[], right: string[]) {
+    if (left.length === 0 || right.length === 0) return 0
+    const rightSet = new Set(right)
+    let overlapCount = 0
+    for (const token of left) {
+        if (rightSet.has(token)) overlapCount += 1
+    }
+    return overlapCount / left.length
+}
+
+function jaccardSimilarity(left: string[], right: string[]) {
+    if (left.length === 0 || right.length === 0) return 0
+    const leftSet = new Set(left)
+    const rightSet = new Set(right)
+    const union = new Set([...leftSet, ...rightSet])
+    let intersection = 0
+    for (const token of leftSet) {
+        if (rightSet.has(token)) intersection += 1
+    }
+    return union.size === 0 ? 0 : intersection / union.size
+}
+
+function scoreCandidate(candidate: NotionPageCandidate, normalizedQuery: string) {
+    const queryTokens = tokenize(normalizedQuery)
+    const titleTokens = tokenize(candidate.title)
+    const urlTokens = tokenize(candidate.url)
+
+    const titleCoverage = tokenOverlap(queryTokens, titleTokens)
+    const urlCoverage = tokenOverlap(queryTokens, urlTokens)
+    const titleContainsFullQuery = candidate.title.toLowerCase().includes(normalizedQuery.toLowerCase())
+
+    let score = 0
+    if (titleContainsFullQuery) score += 0.45
+    score += titleCoverage * 0.45
+    score += urlCoverage * 0.1
+
+    return Math.min(1, Math.max(0, score))
+}
+
+function pickDiverseCandidates(
+    rankedCandidates: Array<NotionPageCandidate & { score: number }>,
+    maxItems: number
+) {
+    const selected: Array<NotionPageCandidate & { score: number }> = []
+
+    for (const candidate of rankedCandidates) {
+        if (selected.length >= maxItems) break
+
+        if (selected.length === 0) {
+            selected.push(candidate)
+            continue
+        }
+
+        const candidateTokens = tokenize(candidate.title)
+        const maxSimilarity = selected.reduce((maxValue, current) => {
+            const similarity = jaccardSimilarity(candidateTokens, tokenize(current.title))
+            return Math.max(maxValue, similarity)
+        }, 0)
+
+        const mmrScore =
+            AGENT_NOTION_MMR_LAMBDA * candidate.score - (1 - AGENT_NOTION_MMR_LAMBDA) * maxSimilarity
+        if (mmrScore > 0 || selected.length < Math.max(1, Math.floor(maxItems / 2))) {
+            selected.push(candidate)
+        }
     }
 
-    return searchResponse.results
-        .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
-        .map((item) => ({
-            id: item.id,
-            title: getItemTitle(item),
-            url: item.url
-        }))
+    if (selected.length > 0) return selected
+    return rankedCandidates.slice(0, maxItems)
+}
+
+async function searchNotionPages(
+    client: Client,
+    options: {
+        query?: string
+        sortByRecent?: boolean
+        limit: number
+    }
+): Promise<NotionPageCandidate[]> {
+    const { query, sortByRecent, limit } = options
+    const pageSize = Math.min(100, Math.max(1, limit))
+    const pages: NotionPageCandidate[] = []
+    let nextCursor: string | undefined
+
+    do {
+        let searchResponse: Awaited<ReturnType<Client["search"]>>
+        try {
+            searchResponse = await client.search({
+                filter: { value: "page", property: "object" },
+                ...(query ? { query } : {}),
+                ...(sortByRecent
+                    ? { sort: { direction: "descending", timestamp: "last_edited_time" as const } }
+                    : {}),
+                page_size: Math.min(pageSize, limit - pages.length),
+                ...(nextCursor ? { start_cursor: nextCursor } : {})
+            })
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            throw new ProviderError(
+                "notion",
+                "NOTION_API_ERROR",
+                "Notion Daten konnten nicht geladen werden.",
+                502,
+                `Notion search failed: ${details}`,
+                error
+            )
+        }
+
+        const batch = searchResponse.results
+            .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
+            .map((item) => ({
+                id: item.id,
+                title: getItemTitle(item),
+                url: item.url
+            }))
+        pages.push(...batch)
+
+        if (!searchResponse.has_more || pages.length >= limit) break
+        nextCursor = searchResponse.next_cursor ?? undefined
+    } while (nextCursor)
+
+    return pages.slice(0, limit)
 }
 
 async function getValidAccessTokenForUser(telegramUserId: string) {
@@ -173,37 +283,44 @@ async function getValidAccessTokenForUser(telegramUserId: string) {
 }
 
 async function findNotionContext(client: Client, query: string): Promise<NotionContextItem[]> {
-    let searchResponse: Awaited<ReturnType<Client["search"]>>
-    try {
-        searchResponse = await client.search({
-            query: query.trim(),
-            page_size: AGENT_NOTION_SEARCH_MAX_RESULTS
-        })
-    } catch (error) {
-        const details = error instanceof Error ? error.message : String(error)
-        throw new ProviderError(
-            "notion",
-            "NOTION_API_ERROR",
-            "Notion Daten konnten nicht geladen werden.",
-            502,
-            `Notion search failed: ${details}`,
-            error
-        )
+    const normalizedQuery = query.trim()
+
+    const queryCandidates = await searchNotionPages(client, {
+        query: normalizedQuery,
+        limit: AGENT_NOTION_SEARCH_TOP_K
+    })
+    const supplementalCandidates =
+        queryCandidates.length >= AGENT_NOTION_SEARCH_TOP_K
+            ? []
+            : await searchNotionPages(client, {
+                sortByRecent: true,
+                limit: AGENT_NOTION_SEARCH_TOP_K
+            })
+
+    const deduplicated = new Map<string, NotionPageCandidate>()
+    for (const candidate of [...queryCandidates, ...supplementalCandidates]) {
+        if (!deduplicated.has(candidate.id)) {
+            deduplicated.set(candidate.id, candidate)
+        }
     }
 
-    const results = searchResponse.results
-        .filter((item) => isFullPageOrDataSource(item))
-        .slice(0, AGENT_NOTION_QUERY_CONTEXT_ITEMS)
+    const ranked = [...deduplicated.values()]
+        .map((candidate) => ({
+            ...candidate,
+            score: scoreCandidate(candidate, normalizedQuery)
+        }))
+        .sort((left, right) => right.score - left.score)
+        .slice(0, AGENT_NOTION_RERANK_TOP_N)
+
+    const thresholdMatches = ranked.filter((candidate) => candidate.score >= AGENT_NOTION_SCORE_THRESHOLD)
+    const rankedPool = thresholdMatches.length > 0 ? thresholdMatches : ranked
+    const selected = pickDiverseCandidates(rankedPool, AGENT_NOTION_QUERY_CONTEXT_ITEMS)
 
     return Promise.all(
-        results.map(async (item): Promise<NotionContextItem> => {
-            const title = getItemTitle(item)
-            const text = item.object === "page"
-                ? await fetchPageExcerpt(client, item.id)
-                : "Datenbank-Eintrag gefunden."
-
+        selected.map(async (item): Promise<NotionContextItem> => {
+            const text = await fetchPageExcerpt(client, item.id)
             return {
-                title,
+                title: item.title,
                 url: item.url,
                 text: text || "Kein auslesbarer Textinhalt vorhanden."
             }
@@ -346,23 +463,8 @@ export async function getNotionKnowledgeForAgent(telegramUserId: string, query: 
 
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const notion = new Client({ auth: accessToken })
-    let contextItems = await findNotionContext(notion, normalizedQuery)
-
-    if (contextItems.length === 0) {
-        const pages = await listNotionPagesForAgent(notion)
-        if (pages.length === 0) return "Keine Notion-Seiten gefunden."
-
-        contextItems = await Promise.all(
-            pages.slice(0, AGENT_NOTION_MAX_PAGES).map(async (page) => {
-                const excerpt = await fetchPageExcerpt(notion, page.id)
-                return {
-                    title: page.title,
-                    url: page.url,
-                    text: truncate(excerpt || "Kein auslesbarer Textinhalt vorhanden.", AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS)
-                }
-            })
-        )
-    }
+    const contextItems = await findNotionContext(notion, normalizedQuery)
+    if (contextItems.length === 0) return "Keine Notion-Seiten gefunden."
 
     return createNotionAgentContext(contextItems, normalizedQuery)
 }
