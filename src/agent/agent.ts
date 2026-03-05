@@ -164,7 +164,7 @@ export async function askAgent(
         }
         : undefined
 
-    const models = ["gpt-5-nano", "gpt-5-mini"]
+    const models = ["gpt-5-nano", "gpt-4.1-mini"]
 
     const availableEmojiNames = Object.keys(emoji).join(", ")
     const messages: ModelMessage[] = [...history, { role: "user", content: question }]
