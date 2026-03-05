@@ -17,10 +17,19 @@ type AskAgentOptions = {
 type NotionToolConfig = {
     tools?: ToolSet
     loginRequired: boolean
+    mode: "none" | "mcp"
 }
 
 const DEFAULT_AGENT_MODEL = "gpt-5-nano"
 const DEFAULT_NOTION_MCP_SERVER_URL = "https://mcp.notion.com/mcp"
+
+function logMcp(event: string, data?: Record<string, unknown>) {
+    if (data) {
+        console.info(`[agent.mcp] ${event}`, data)
+        return
+    }
+    console.info(`[agent.mcp] ${event}`)
+}
 
 function parseRetryAfterSeconds(details: string): number | undefined {
     const match = details.match(/try again in\s+(\d+)s/i)
@@ -86,15 +95,19 @@ function parseAgentOutput(raw: string): AgentAnswer {
 
 async function resolveNotionTools(telegramUserId?: string): Promise<NotionToolConfig> {
     if (!telegramUserId) {
-        return { loginRequired: false }
+        logMcp("skipped:no-user")
+        return { loginRequired: false, mode: "none" }
     }
 
     try {
+        logMcp("token:load:start", { telegramUserId })
         const accessToken = await getValidAccessTokenForUser(telegramUserId)
         const serverUrl = process.env.NOTION_MCP_SERVER_URL?.trim() || DEFAULT_NOTION_MCP_SERVER_URL
+        logMcp("token:load:ok", { telegramUserId, serverUrl })
 
-        return {
+        const config: NotionToolConfig = {
             loginRequired: false,
+            mode: "mcp",
             tools: {
                 notion_mcp: openai.tools.mcp({
                     serverLabel: "notion",
@@ -104,11 +117,18 @@ async function resolveNotionTools(telegramUserId?: string): Promise<NotionToolCo
                 })
             }
         }
+        logMcp("tool:configured", { telegramUserId, mode: config.mode, serverUrl })
+        return config
     } catch (error) {
         if (error instanceof NotionAuthorizationRequiredError) {
-            return { loginRequired: true }
+            logMcp("token:missing", { telegramUserId })
+            return { loginRequired: true, mode: "none" }
         }
 
+        logMcp("token:load:error", {
+            telegramUserId,
+            error: collectErrorDetails(error)
+        })
         throw error
     }
 }
@@ -128,9 +148,7 @@ function createAgentModel(options: {
     ]
 
     if (options.notionTools) {
-        instructions.push(
-            "Wenn die Frage Notion-Wissen erfordert, nutze das MCP-Tool notion_mcp statt Inhalte zu raten."
-        )
+        instructions.push("Wenn die Frage Notion-Wissen erfordert, nutze die verfuegbaren Notion-Tools statt Inhalte zu raten.")
     }
 
     if (options.notionLoginRequired) {
@@ -153,6 +171,12 @@ export async function askAgent(
     const notion = await resolveNotionTools(options?.telegramUserId)
 
     const model = process.env.OPENAI_AGENT_MODEL?.trim() || DEFAULT_AGENT_MODEL
+    logMcp("agent:start", {
+        telegramUserId: options?.telegramUserId,
+        model,
+        notionMode: notion.mode,
+        notionLoginRequired: notion.loginRequired
+    })
 
     const availableEmojiNames = Object.keys(emoji).join(", ")
     const messages: ModelMessage[] = [...history, { role: "user", content: question }]
@@ -177,9 +201,21 @@ export async function askAgent(
 
     let rawAnswer: string | undefined
     try {
+        logMcp("agent:generate:start", { model, notionMode: notion.mode })
         const result = await agent.generate({ messages })
         rawAnswer = result.text?.trim()
+        logMcp("agent:generate:ok", {
+            model,
+            notionMode: notion.mode,
+            hasText: Boolean(rawAnswer),
+            textLength: rawAnswer?.length ?? 0
+        })
     } catch (error) {
+        logMcp("agent:generate:error", {
+            model,
+            notionMode: notion.mode,
+            error: collectErrorDetails(error)
+        })
         throw normalizeAgentError(error)
     }
 
