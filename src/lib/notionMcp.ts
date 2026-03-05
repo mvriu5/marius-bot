@@ -89,31 +89,51 @@ function generatePkceCodeChallenge(codeVerifier: string): string {
 }
 
 async function discoverOAuthMetadata(serverUrl: string): Promise<OAuthMetadata> {
-    const normalizedServerUrl = serverUrl.replace(/\/+$/g, "")
-    const protectedResourceUrl = `${normalizedServerUrl}/.well-known/oauth-protected-resource`
+    const endpointUrl = new URL(serverUrl)
+    const normalizedPath = endpointUrl.pathname.replace(/\/+$/g, "")
+    const protectedResourceCandidates = [
+        new URL("/.well-known/oauth-protected-resource", endpointUrl.origin).toString(),
+        new URL(
+            `/.well-known/oauth-protected-resource${normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`}`,
+            endpointUrl.origin
+        ).toString(),
+        new URL(`${normalizedPath || "/"}/.well-known/oauth-protected-resource`, endpointUrl.origin).toString()
+    ]
 
-    const protectedResourceResponse = await fetch(protectedResourceUrl, {
-        headers: { Accept: "application/json" }
-    })
-    if (!protectedResourceResponse.ok) {
-        throw new ProviderError(
-            "notion-mcp",
-            "MCP_DISCOVERY_FAILED",
-            "Notion MCP OAuth Discovery ist fehlgeschlagen.",
-            502,
-            `Protected resource metadata failed (${protectedResourceResponse.status})`
-        )
+    let authServerUrl: string | undefined
+    const attempted: string[] = []
+
+    for (const candidate of protectedResourceCandidates) {
+        attempted.push(candidate)
+        const response = await fetch(candidate, {
+            headers: { Accept: "application/json" }
+        })
+
+        if (response.ok) {
+            const protectedResource = (await response.json()) as ProtectedResourceMetadata
+            authServerUrl = protectedResource.authorization_servers?.[0]
+            if (authServerUrl) break
+            continue
+        }
+
+        // Some servers expose authorization hints only via WWW-Authenticate on 401/403.
+        if (response.status === 401 || response.status === 403) {
+            const wwwAuthenticate = response.headers.get("www-authenticate") ?? ""
+            const authServerMatch = wwwAuthenticate.match(/authorization_server="?([^",\s]+)"?/i)
+            if (authServerMatch?.[1]) {
+                authServerUrl = authServerMatch[1]
+                break
+            }
+        }
     }
 
-    const protectedResource = (await protectedResourceResponse.json()) as ProtectedResourceMetadata
-    const authServerUrl = protectedResource.authorization_servers?.[0]
     if (!authServerUrl) {
         throw new ProviderError(
             "notion-mcp",
             "MCP_DISCOVERY_FAILED",
             "Notion MCP OAuth Discovery ist fehlgeschlagen.",
             502,
-            "No authorization_servers in protected resource metadata"
+            `No authorization server found. Tried: ${attempted.join(", ")}`
         )
     }
 
