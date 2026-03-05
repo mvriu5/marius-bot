@@ -6,6 +6,12 @@ import { getNotionKnowledgeForAgent } from "../lib/notion.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
 
+function escapeTelegramMarkdown(value: string): string {
+    return value
+        .replace(/\\/g, "\\\\")
+        .replace(/([_*\[\]()`])/g, "\\$1")
+}
+
 function resolveEmojiByName(name: string): EmojiValue | null {
     const normalized = name.toLowerCase().trim()
     const candidate = (emoji as unknown as Record<string, unknown>)[normalized]
@@ -79,11 +85,12 @@ export async function postAgentReply(
     const renderedText = renderEmojiTokens(answerText)
     const urls = extractUrls(renderedText)
     const choices = extractTwoChoices(renderedText)
+    const safeRenderedText = escapeTelegramMarkdown(renderedText)
 
     await thread.post(
         Card({
             children: [
-                CardText(renderedText),
+                CardText(safeRenderedText),
                 ...(choices
                     ? [
                         Actions([
