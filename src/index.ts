@@ -8,6 +8,7 @@ import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./lib/f
 import { createGoogleAuthorizationUrl, handleGoogleOAuthCallback } from "./lib/googleCalendar.js"
 import { createGithubAuthorizationUrl, handleGithubOAuthCallback } from "./lib/github.js"
 import { createNotionAuthorizationUrl, handleNotionOAuthCallback } from "./lib/notion.js"
+import { createNotionMcpAuthorizationUrl, handleNotionMcpOAuthCallback } from "./lib/notionMcp.js"
 
 const app = new Hono()
 
@@ -39,6 +40,12 @@ registerOAuthRoutes(app, {
     basePath: "notion",
     createAuthorizationUrl: createNotionAuthorizationUrl,
     handleOAuthCallback: handleNotionOAuthCallback
+})
+registerOAuthRoutes(app, {
+    providerName: "Notion MCP",
+    basePath: "notion-mcp",
+    createAuthorizationUrl: createNotionMcpAuthorizationUrl,
+    handleOAuthCallback: handleNotionMcpOAuthCallback
 })
 
 export default app

@@ -2,7 +2,7 @@ import { openai } from "@ai-sdk/openai"
 import { type ModelMessage, stepCountIs, type ToolSet, ToolLoopAgent } from "ai"
 import { emoji } from "chat"
 import { ProviderError } from "../errors/appError.js"
-import { getValidAccessTokenForUser, NotionAuthorizationRequiredError } from "../lib/notion.js"
+import { getValidNotionMcpAccessTokenForUser, NotionMcpAuthorizationRequiredError } from "../lib/notionMcp.js"
 
 type AgentAnswer = {
     text: string
@@ -101,7 +101,7 @@ async function resolveNotionTools(telegramUserId?: string): Promise<NotionToolCo
 
     try {
         logMcp("token:load:start", { telegramUserId })
-        const accessToken = await getValidAccessTokenForUser(telegramUserId)
+        const accessToken = await getValidNotionMcpAccessTokenForUser(telegramUserId)
         const serverUrl = process.env.NOTION_MCP_SERVER_URL?.trim() || DEFAULT_NOTION_MCP_SERVER_URL
         logMcp("token:load:ok", { telegramUserId, serverUrl })
 
@@ -120,7 +120,7 @@ async function resolveNotionTools(telegramUserId?: string): Promise<NotionToolCo
         logMcp("tool:configured", { telegramUserId, mode: config.mode, serverUrl })
         return config
     } catch (error) {
-        if (error instanceof NotionAuthorizationRequiredError) {
+        if (error instanceof NotionMcpAuthorizationRequiredError) {
             logMcp("token:missing", { telegramUserId })
             return { loginRequired: true, mode: "none" }
         }
@@ -152,7 +152,7 @@ function createAgentModel(options: {
     }
 
     if (options.notionLoginRequired) {
-        instructions.push("Notion ist nicht verbunden. Sage klar, dass /notion login noetig ist.")
+        instructions.push("Notion MCP ist nicht verbunden. Sage klar, dass /notion mcp-login noetig ist.")
     }
 
     return new ToolLoopAgent({
