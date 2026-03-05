@@ -30,7 +30,7 @@ type NotionContextItem = {
 }
 
 const AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS = 500
-const AGENT_NOTION_MAX_CONTEXT_CHARS = 6000
+const AGENT_NOTION_MAX_CONTEXT_CHARS = 40000
 const AGENT_NOTION_SEARCH_TOP_K = 80
 const AGENT_NOTION_RERANK_TOP_N = 60
 const AGENT_NOTION_QUERY_CONTEXT_ITEMS = 50
@@ -273,6 +273,47 @@ async function searchNotionPages(
     return pages.slice(0, limit)
 }
 
+async function fetchAllNotionPageCandidates(client: Client): Promise<NotionPageCandidate[]> {
+    const pages: NotionPageCandidate[] = []
+    let nextCursor: string | undefined
+
+    do {
+        let searchResponse: Awaited<ReturnType<Client["search"]>>
+        try {
+            searchResponse = await client.search({
+                filter: { value: "page", property: "object" },
+                sort: { direction: "descending", timestamp: "last_edited_time" as const },
+                page_size: 100,
+                ...(nextCursor ? { start_cursor: nextCursor } : {})
+            })
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            throw new ProviderError(
+                "notion",
+                "NOTION_API_ERROR",
+                "Notion Daten konnten nicht geladen werden.",
+                502,
+                `Notion search failed: ${details}`,
+                error
+            )
+        }
+
+        const batch = searchResponse.results
+            .filter((item) => isFullPageOrDataSource(item) && item.object === "page")
+            .map((item) => ({
+                id: item.id,
+                title: getItemTitle(item),
+                url: item.url
+            }))
+        pages.push(...batch)
+
+        if (!searchResponse.has_more) break
+        nextCursor = searchResponse.next_cursor ?? undefined
+    } while (nextCursor)
+
+    return pages
+}
+
 async function getValidAccessTokenForUser(telegramUserId: string) {
     const token = await getStateValue<StoredNotionToken>(keys.tokenKey(telegramUserId))
     if (!token?.accessToken) {
@@ -285,20 +326,16 @@ async function getValidAccessTokenForUser(telegramUserId: string) {
 async function findNotionContext(client: Client, query: string): Promise<NotionContextItem[]> {
     const normalizedQuery = query.trim()
 
-    const queryCandidates = await searchNotionPages(client, {
-        query: normalizedQuery,
-        limit: AGENT_NOTION_SEARCH_TOP_K
-    })
-    const supplementalCandidates =
-        queryCandidates.length >= AGENT_NOTION_SEARCH_TOP_K
-            ? []
-            : await searchNotionPages(client, {
-                sortByRecent: true,
-                limit: AGENT_NOTION_SEARCH_TOP_K
-            })
+    const [queryCandidates, allCandidates] = await Promise.all([
+        searchNotionPages(client, {
+            query: normalizedQuery,
+            limit: AGENT_NOTION_SEARCH_TOP_K
+        }),
+        fetchAllNotionPageCandidates(client)
+    ])
 
     const deduplicated = new Map<string, NotionPageCandidate>()
-    for (const candidate of [...queryCandidates, ...supplementalCandidates]) {
+    for (const candidate of [...queryCandidates, ...allCandidates]) {
         if (!deduplicated.has(candidate.id)) {
             deduplicated.set(candidate.id, candidate)
         }

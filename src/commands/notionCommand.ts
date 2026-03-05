@@ -79,8 +79,17 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
                 Card({
                     title: "Notion Pages",
                     children: pages.length === 0
-                        ? [CardText("Keine Notion-Seiten gefunden.")]
-                        : pages.map((page, index) => CardText(`${index + 1}. ${page.title}`))
+                        ? [
+                            CardText("Keine Notion-Seiten gefunden."),
+                            CardText("Hinweis: Teile deine Notion-Seiten mit der Integration, damit der Agent darauf zugreifen kann.")
+                        ]
+                        : [
+                            CardText(`${pages.length} Seite(n) gefunden:`),
+                            ...pages.map((page, index) =>
+                                CardText(`${index + 1}. ${page.title}${page.url ? ` — ${page.url}` : ""}`)
+                            ),
+                            CardText("Hinweis: Fehlende Seiten? Teile sie in Notion direkt mit dieser Integration.")
+                        ]
                 })
             )
         } catch (error) {
