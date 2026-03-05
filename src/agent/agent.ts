@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai"
-import { type ModelMessage, stepCountIs, tool, ToolLoopAgent } from "ai"
+import { type ModelMessage, stepCountIs, tool, type ToolSet, ToolLoopAgent } from "ai"
 import { emoji } from "chat"
 import { z } from "zod/v4"
 import { ProviderError } from "../errors/appError.js"
@@ -19,14 +19,83 @@ type AskAgentOptions = {
     externalContext?: string
 }
 
+function parseRetryAfterSeconds(details: string): number | undefined {
+    const match = details.match(/try again in\s+(\d+)s/i)
+    if (!match) return undefined
+
+    const seconds = Number.parseInt(match[1], 10)
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined
+}
+
+function collectErrorDetails(error: unknown): string {
+    if (error instanceof Error) {
+        const message = error.message?.trim()
+        return message || "Unbekannter Fehler"
+    }
+
+    return String(error)
+}
+
+function isRateLimitError(error: unknown): boolean {
+    const details = collectErrorDetails(error).toLowerCase()
+    return details.includes("rate limit") || details.includes("429")
+}
+
+function normalizeAgentError(error: unknown): ProviderError {
+    const details = collectErrorDetails(error)
+
+    if (isRateLimitError(error)) {
+        const retryAfterSeconds = parseRetryAfterSeconds(details)
+        const retryHint = retryAfterSeconds
+            ? ` Bitte in etwa ${retryAfterSeconds} Sekunden erneut versuchen.`
+            : " Bitte gleich erneut versuchen."
+
+        return new ProviderError(
+            "openai",
+            "OPENAI_RATE_LIMIT",
+            `OpenAI ist gerade ausgelastet.${retryHint}`,
+            502,
+            details,
+            error
+        )
+    }
+
+    return new ProviderError(
+        "openai",
+        "OPENAI_GENERATION_FAILED",
+        "OpenAI-Antwort fehlgeschlagen. Bitte spaeter erneut versuchen.",
+        502,
+        details,
+        error
+    )
+}
+
 function parseAgentOutput(raw: string): AgentAnswer {
     const reactionMatch = raw.match(/\[reaction:([a-z0-9_]+)\]/i)
     const reactionName = reactionMatch?.[1]?.toLowerCase()
     const text = raw.replace(/\[reaction:[^\]]+\]/gi, "").trim()
+
     return {
         text,
         reactionName
     }
+}
+
+function createAgentModel(model: string, availableEmojiNames: string, notionTools: ToolSet | undefined) {
+    return new ToolLoopAgent({
+        model: openai(model),
+        stopWhen: stepCountIs(20),
+        instructions: [
+            "Du bist ein hilfreicher Assistent. Antworte klar und knapp auf Deutsch.",
+            "Wenn die Frage Notion-Wissen erfordert, nutze zuerst search_notion und dann get_page mit passenden pageId-Werten.",
+            "Wenn Notion nicht verbunden ist, sag klar, dass /notion login noetig ist.",
+            "Nutze wenn sinnvoll Emojis aus dem Chat SDK als Token im Format :emoji_name:.",
+            `Verfuegbare Emoji-Namen: ${availableEmojiNames}.`,
+            "Wenn eine Reaction zur letzten User-Nachricht hilfreich ist, fuege genau ein Token [reaction:emoji_name] hinzu.",
+            "Wenn keine Reaction sinnvoll ist, fuege kein Reaction-Token hinzu."
+        ].join(" "),
+        tools: notionTools
+    })
 }
 
 export async function askAgent(
@@ -50,7 +119,7 @@ export async function askAgent(
                         if (error instanceof NotionAuthorizationRequiredError) {
                             return {
                                 ok: false,
-                                error: "Notion ist nicht verbunden. Bitte /notion login ausführen.",
+                                error: "Notion ist nicht verbunden. Bitte /notion login ausfuehren.",
                                 authorizationUrl: error.authorizationUrl
                             }
                         }
@@ -65,7 +134,7 @@ export async function askAgent(
                 }
             }),
             get_page: tool({
-                description: "Lädt den Inhalt einer Notion-Seite per pageId.",
+                description: "Laedt den Inhalt einer Notion-Seite per pageId.",
                 inputSchema: z.object({
                     pageId: z.string().min(8),
                     maxChars: z.number().int().min(800).max(12000).default(6000)
@@ -78,7 +147,7 @@ export async function askAgent(
                         if (error instanceof NotionAuthorizationRequiredError) {
                             return {
                                 ok: false,
-                                error: "Notion ist nicht verbunden. Bitte /notion login ausführen.",
+                                error: "Notion ist nicht verbunden. Bitte /notion login ausfuehren.",
                                 authorizationUrl: error.authorizationUrl
                             }
                         }
@@ -95,22 +164,9 @@ export async function askAgent(
         }
         : undefined
 
-    const availableEmojiNames = Object.keys(emoji).join(", ")
-    const agent = new ToolLoopAgent({
-        model: openai("gpt-5-nano"),
-        stopWhen: stepCountIs(20),
-        instructions: [
-            "Du bist ein hilfreicher Assistent. Antworte klar und knapp auf Deutsch.",
-            "Wenn die Frage Notion-Wissen erfordert, nutze zuerst search_notion und dann get_page mit passenden pageId-Werten.",
-            "Wenn Notion nicht verbunden ist, sag klar, dass /notion login noetig ist.",
-            "Nutze wenn sinnvoll Emojis aus dem Chat SDK als Token im Format :emoji_name:.",
-            `Verfügbare Emoji-Namen: ${availableEmojiNames}.`,
-            "Wenn eine Reaction zur letzten User-Nachricht hilfreich ist, füge genau ein Token [reaction:emoji_name] hinzu.",
-            "Wenn keine Reaction sinnvoll ist, füge kein Reaction-Token hinzu."
-        ].join(" "),
-        tools: notionTools
-    })
+    const models = ["gpt-5-nano", "gpt-5-mini"]
 
+    const availableEmojiNames = Object.keys(emoji).join(", ")
     const messages: ModelMessage[] = [...history, { role: "user", content: question }]
 
     if (options?.externalContext?.trim()) {
@@ -124,9 +180,33 @@ export async function askAgent(
         })
     }
 
-    const result = await agent.generate({ messages })
+    let rawAnswer: string | undefined
+    let lastError: unknown
 
-    const rawAnswer = result.text?.trim()
+    for (let index = 0; index < models.length; index += 1) {
+        const model = models[index]
+        const agent = createAgentModel(model, availableEmojiNames, notionTools)
+
+        try {
+            const result = await agent.generate({ messages })
+            rawAnswer = result.text?.trim()
+            break
+        } catch (error) {
+            lastError = error
+            const hasNextModel = index < models.length - 1
+
+            if (hasNextModel && isRateLimitError(error)) {
+                continue
+            }
+
+            throw normalizeAgentError(error)
+        }
+    }
+
+    if (!rawAnswer && lastError) {
+        throw normalizeAgentError(lastError)
+    }
+
     if (!rawAnswer) {
         throw new ProviderError(
             "openai",
