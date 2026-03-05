@@ -2,7 +2,6 @@ import { Actions, Button, Card, CardText, LinkButton, emoji, type EmojiValue, ty
 import type { ModelMessage } from "ai"
 import { askAgent } from "./agent.js"
 import { extractTwoChoices } from "./choice.js"
-import { getNotionKnowledgeForAgent } from "../lib/notion.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
 
@@ -66,22 +65,10 @@ export async function postAgentReply(
             content: msg.text.trim()
         }))
 
-    let notionContext: string | null = null
-    let notionContextNotice: string | null = null
-    if (sourceMessage?.author.userId) {
-        try {
-            notionContext = await getNotionKnowledgeForAgent(sourceMessage.author.userId, question)
-        } catch (error) {
-            const details = error instanceof Error ? error.message : String(error)
-            console.info("[notion.context] skipped", { reason: details })
-            notionContextNotice = "Hinweis: Notion-Kontext konnte diesmal nicht geladen werden."
-        }
-    }
-
-    const answer = await askAgent(question, history, notionContext ?? undefined)
-    const answerText = notionContextNotice
-        ? `${notionContextNotice}\n\n${answer.text}`
-        : answer.text
+    const answer = await askAgent(question, history, {
+        telegramUserId: sourceMessage?.author.userId
+    })
+    const answerText = answer.text
     const renderedText = renderEmojiTokens(answerText)
     const urls = extractUrls(renderedText)
     const choices = extractTwoChoices(renderedText)

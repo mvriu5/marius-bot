@@ -31,6 +31,8 @@ type NotionContextItem = {
 
 const AGENT_NOTION_MAX_PAGE_EXCERPT_CHARS = 500
 const AGENT_NOTION_MAX_CONTEXT_CHARS = 40000
+const AGENT_NOTION_MAX_PAGE_CONTENT_CHARS = 12000
+const AGENT_NOTION_MAX_PAGE_CONTENT_DEPTH = 3
 const AGENT_NOTION_SEARCH_TOP_K = 80
 const AGENT_NOTION_RERANK_TOP_N = 60
 const AGENT_NOTION_QUERY_CONTEXT_ITEMS = 50
@@ -41,6 +43,22 @@ type NotionPageCandidate = {
     id: string
     title: string
     url: string
+}
+
+export type AgentNotionSearchResult = {
+    pageId: string
+    title: string
+    url: string
+    excerpt: string
+    score: number
+}
+
+export type AgentNotionPageResult = {
+    pageId: string
+    title: string
+    url: string
+    text: string
+    truncated: boolean
 }
 
 export class NotionAuthorizationRequiredError extends AuthorizationRequiredError {
@@ -140,6 +158,83 @@ async function fetchPageExcerpt(client: Client, pageId: string) {
             error
         )
     }
+}
+
+async function fetchBlockTextTree(
+    client: Client,
+    blockId: string,
+    maxChars: number,
+    depth = 0
+): Promise<{ text: string; truncated: boolean }> {
+    let text = ""
+    let truncated = false
+    let nextCursor: string | undefined
+
+    const appendLine = (line: string) => {
+        const normalized = line.trim()
+        if (!normalized) return
+
+        const candidate = text ? `${text}\n${normalized}` : normalized
+        if (candidate.length > maxChars) {
+            text = candidate.slice(0, maxChars).trimEnd()
+            truncated = true
+            return
+        }
+
+        text = candidate
+    }
+
+    do {
+        let response: Awaited<ReturnType<Client["blocks"]["children"]["list"]>>
+        try {
+            response = await client.blocks.children.list({
+                block_id: blockId,
+                page_size: 100,
+                ...(nextCursor ? { start_cursor: nextCursor } : {})
+            })
+        } catch (error) {
+            const details = error instanceof Error ? error.message : String(error)
+            throw new ProviderError(
+                "notion",
+                "NOTION_API_ERROR",
+                "Notion Daten konnten nicht geladen werden.",
+                502,
+                `Notion blocks read failed: ${details}`,
+                error
+            )
+        }
+
+        for (const block of response.results) {
+            if (truncated) break
+
+            appendLine(blockToText(block))
+            if (truncated) break
+
+            const hasChildren = "has_children" in block && Boolean(block.has_children)
+            const childId = "id" in block && typeof block.id === "string" ? block.id : null
+            if (!hasChildren || !childId || depth >= AGENT_NOTION_MAX_PAGE_CONTENT_DEPTH - 1) {
+                continue
+            }
+
+            const remainingChars = maxChars - text.length
+            if (remainingChars <= 0) {
+                truncated = true
+                break
+            }
+
+            const nested = await fetchBlockTextTree(client, childId, remainingChars, depth + 1)
+            appendLine(nested.text)
+            if (nested.truncated) {
+                truncated = true
+                break
+            }
+        }
+
+        if (truncated || !response.has_more) break
+        nextCursor = response.next_cursor ?? undefined
+    } while (nextCursor)
+
+    return { text, truncated }
 }
 
 function tokenize(input: string): string[] {
@@ -489,6 +584,107 @@ export async function getNotionPages(telegramUserId: string): Promise<NotionPage
     } while (nextCursor)
 
     return allPages
+}
+
+export async function searchNotionForAgent(
+    telegramUserId: string,
+    query: string,
+    limit = 5
+): Promise<AgentNotionSearchResult[]> {
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery) return []
+
+    const normalizedLimit = Math.min(8, Math.max(1, limit))
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const notion = new Client({ auth: accessToken })
+
+    const candidates = await searchNotionPages(notion, {
+        query: normalizedQuery,
+        sortByRecent: true,
+        limit: Math.max(normalizedLimit * 6, 20)
+    })
+
+    if (candidates.length === 0) return []
+
+    const ranked = candidates
+        .map((candidate) => ({
+            ...candidate,
+            score: scoreCandidate(candidate, normalizedQuery)
+        }))
+        .sort((left, right) => right.score - left.score)
+
+    const selected = pickDiverseCandidates(ranked, normalizedLimit)
+    const withExcerpt = await Promise.all(
+        selected.map(async (candidate) => {
+            const excerpt = await fetchPageExcerpt(notion, candidate.id)
+            return {
+                pageId: candidate.id,
+                title: candidate.title,
+                url: candidate.url,
+                excerpt: excerpt || "Kein auslesbarer Textinhalt vorhanden.",
+                score: Math.round(candidate.score * 1000) / 1000
+            }
+        })
+    )
+
+    return withExcerpt
+}
+
+export async function getNotionPageForAgent(
+    telegramUserId: string,
+    pageId: string,
+    maxChars = 6000
+): Promise<AgentNotionPageResult> {
+    const normalizedPageId = pageId.trim()
+    if (!normalizedPageId) {
+        throw new ProviderError(
+            "notion",
+            "NOTION_INVALID_PAGE_ID",
+            "Die Notion-Seite konnte nicht geladen werden.",
+            400,
+            "Notion page id is empty."
+        )
+    }
+
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+    const notion = new Client({ auth: accessToken })
+    const safeMaxChars = Math.min(
+        AGENT_NOTION_MAX_PAGE_CONTENT_CHARS,
+        Math.max(800, Math.floor(maxChars))
+    )
+
+    let page: Awaited<ReturnType<Client["pages"]["retrieve"]>>
+    try {
+        page = await notion.pages.retrieve({ page_id: normalizedPageId })
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error)
+        throw new ProviderError(
+            "notion",
+            "NOTION_API_ERROR",
+            "Notion Daten konnten nicht geladen werden.",
+            502,
+            `Notion page read failed: ${details}`,
+            error
+        )
+    }
+
+    const title =
+        isFullPageOrDataSource(page) && page.object === "page"
+            ? getItemTitle(page)
+            : "Notion Seite"
+    const url =
+        "url" in page && typeof page.url === "string"
+            ? page.url
+            : ""
+
+    const content = await fetchBlockTextTree(notion, normalizedPageId, safeMaxChars)
+    return {
+        pageId: normalizedPageId,
+        title,
+        url,
+        text: content.text || "Kein auslesbarer Textinhalt vorhanden.",
+        truncated: content.truncated
+    }
 }
 
 export async function getNotionKnowledgeForAgent(telegramUserId: string, query: string) {
