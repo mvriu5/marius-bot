@@ -46,7 +46,7 @@ export const COMMAND_ENTRIES = [
         command: weather,
         description: "Zeigt das Wetter oder speichert eine Standard-Location.",
         aliases: ["wetter"] as const,
-        subcommands: ["set <location>"] as const,
+        subcommands: ["set <location>", "tomorrow [location]"] as const,
         actionIds: [] as const
     },
     {

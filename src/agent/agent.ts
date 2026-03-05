@@ -63,7 +63,7 @@ function normalizeAgentError(error: unknown): ProviderError {
     return new ProviderError(
         "openai",
         "OPENAI_GENERATION_FAILED",
-        "OpenAI-Antwort fehlgeschlagen. Bitte spaeter erneut versuchen.",
+        "OpenAI-Antwort fehlgeschlagen. Bitte späeter erneut versuchen.",
         502,
         details,
         error
@@ -88,11 +88,11 @@ function createAgentModel(model: string, availableEmojiNames: string, notionTool
         instructions: [
             "Du bist ein hilfreicher Assistent. Antworte klar und knapp auf Deutsch.",
             "Wenn die Frage Notion-Wissen erfordert, nutze zuerst search_notion und dann get_page mit passenden pageId-Werten.",
-            "Wenn Notion nicht verbunden ist, sag klar, dass /notion login noetig ist.",
+            "Wenn Notion nicht verbunden ist, sag klar, dass /notion login nötig ist.",
             "Nutze wenn sinnvoll Emojis aus dem Chat SDK als Token im Format :emoji_name:.",
-            `Verfuegbare Emoji-Namen: ${availableEmojiNames}.`,
-            "Wenn eine Reaction zur letzten User-Nachricht hilfreich ist, fuege genau ein Token [reaction:emoji_name] hinzu.",
-            "Wenn keine Reaction sinnvoll ist, fuege kein Reaction-Token hinzu."
+            `Verfügbare Emoji-Namen: ${availableEmojiNames}.`,
+            "Wenn eine Reaction zur letzten User-Nachricht hilfreich ist, füge genau ein Token [reaction:emoji_name] hinzu.",
+            "Wenn keine Reaction sinnvoll ist, füge kein Reaction-Token hinzu."
         ].join(" "),
         tools: notionTools
     })
@@ -123,7 +123,6 @@ export async function askAgent(
                                 authorizationUrl: error.authorizationUrl
                             }
                         }
-
                         const details = error instanceof Error ? error.message : String(error)
                         return {
                             ok: false,
@@ -134,7 +133,7 @@ export async function askAgent(
                 }
             }),
             get_page: tool({
-                description: "Laedt den Inhalt einer Notion-Seite per pageId.",
+                description: "Lädt den Inhalt einer Notion-Seite per pageId.",
                 inputSchema: z.object({
                     pageId: z.string().min(8),
                     maxChars: z.number().int().min(800).max(12000).default(6000)
@@ -147,7 +146,7 @@ export async function askAgent(
                         if (error instanceof NotionAuthorizationRequiredError) {
                             return {
                                 ok: false,
-                                error: "Notion ist nicht verbunden. Bitte /notion login ausfuehren.",
+                                error: "Notion ist nicht verbunden. Bitte /notion login ausführen.",
                                 authorizationUrl: error.authorizationUrl
                             }
                         }

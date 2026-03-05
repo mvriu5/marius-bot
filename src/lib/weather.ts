@@ -10,6 +10,7 @@ type OpenMeteoResponse = {
         temperature_2m_min?: number[]
         temperature_2m_max?: number[]
         precipitation_probability_max?: number[]
+        weather_code?: number[]
     }
 }
 
@@ -47,9 +48,9 @@ type WeatherSummary = {
 function weatherCodeToText(code: number | undefined) {
     const map: Record<number, string> = {
         0: "Klar",
-        1: "Überwiegend klar",
-        2: "Teilweise bewölkt",
-        3: "Bewölkt",
+        1: "Ueberwiegend klar",
+        2: "Teilweise bewoelkt",
+        3: "Bewoelkt",
         45: "Nebel",
         48: "Reifnebel",
         51: "Leichter Nieselregen",
@@ -72,18 +73,18 @@ function weatherCodeToText(code: number | undefined) {
 }
 
 function weatherCodeToEmoji(code: number | undefined) {
-    if (code === undefined) return "❓"
+    if (code === undefined) return "?"
 
-    if (code === 0 || code === 1) return "☀️"
-    if (code === 2 || code === 3) return "⛅"
-    if (code === 45 || code === 48) return "🌫️"
-    if (code === 51 || code === 53 || code === 55) return "🌦️"
-    if (code === 61 || code === 63 || code === 65) return "🌧️"
-    if (code === 71 || code === 73 || code === 75) return "🌨️"
-    if (code === 80 || code === 81 || code === 82) return "🌦️"
-    if (code === 95) return "⛈️"
+    if (code === 0 || code === 1) return "sun"
+    if (code === 2 || code === 3) return "cloud"
+    if (code === 45 || code === 48) return "fog"
+    if (code === 51 || code === 53 || code === 55) return "drizzle"
+    if (code === 61 || code === 63 || code === 65) return "rain"
+    if (code === 71 || code === 73 || code === 75) return "snow"
+    if (code === 80 || code === 81 || code === 82) return "showers"
+    if (code === 95) return "thunder"
 
-    return "🌡️"
+    return "weather"
 }
 
 async function resolveLocation(location?: string) {
@@ -103,7 +104,7 @@ async function resolveLocation(location?: string) {
         throw new ProviderError(
             "weather",
             "GEOCODING_REQUEST_FAILED",
-            "Ort konnte nicht aufgelöst werden.",
+            "Ort konnte nicht aufgeloest werden.",
             502,
             `Geocoding error (${response.status}): ${details}`
         )
@@ -136,16 +137,17 @@ export async function getRememberedWeatherLocation(telegramUserId: string) {
     return (await state.get<string>(weatherLocationKey(telegramUserId))) ?? undefined
 }
 
-export async function getTodayWeather(location?: string): Promise<WeatherSummary> {
+export async function getWeather(location: string | undefined, dayOffset: 0 | 1): Promise<WeatherSummary> {
     const resolved = await resolveLocation(location)
+    const forecastDays = dayOffset + 1
 
     const params = new URLSearchParams({
         latitude: String(resolved.latitude),
         longitude: String(resolved.longitude),
         current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
-        daily: "temperature_2m_min,temperature_2m_max,precipitation_probability_max",
+        daily: "temperature_2m_min,temperature_2m_max,precipitation_probability_max,weather_code",
         timezone: "Europe/Berlin",
-        forecast_days: "1"
+        forecast_days: String(forecastDays)
     })
 
     const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
@@ -163,16 +165,18 @@ export async function getTodayWeather(location?: string): Promise<WeatherSummary
     const data = (await response.json()) as OpenMeteoResponse
     const current = data.current ?? {}
     const daily = data.daily ?? {}
+    const index = dayOffset
+    const dailyWeatherCode = daily.weather_code?.[index]
 
     return {
         locationLabel: resolved.label,
-        condition: weatherCodeToText(current.weather_code),
-        conditionEmoji: weatherCodeToEmoji(current.weather_code),
-        temperatureC: current.temperature_2m,
-        apparentTemperatureC: current.apparent_temperature,
-        windSpeedKmh: current.wind_speed_10m,
-        minTempC: daily.temperature_2m_min?.[0],
-        maxTempC: daily.temperature_2m_max?.[0],
-        precipitationProbabilityPct: daily.precipitation_probability_max?.[0]
+        condition: weatherCodeToText(dayOffset === 0 ? current.weather_code : dailyWeatherCode),
+        conditionEmoji: weatherCodeToEmoji(dayOffset === 0 ? current.weather_code : dailyWeatherCode),
+        temperatureC: dayOffset === 0 ? current.temperature_2m : undefined,
+        apparentTemperatureC: dayOffset === 0 ? current.apparent_temperature : undefined,
+        windSpeedKmh: dayOffset === 0 ? current.wind_speed_10m : undefined,
+        minTempC: daily.temperature_2m_min?.[index],
+        maxTempC: daily.temperature_2m_max?.[index],
+        precipitationProbabilityPct: daily.precipitation_probability_max?.[index]
     }
 }
