@@ -20,7 +20,6 @@ type NotionToolConfig = {
 }
 
 const DEFAULT_AGENT_MODEL = "gpt-5-nano"
-const DEFAULT_AGENT_FALLBACK_MODEL = "gpt-4.1-mini"
 const DEFAULT_NOTION_MCP_SERVER_URL = "https://mcp.notion.com/mcp"
 
 function parseRetryAfterSeconds(details: string): number | undefined {
@@ -153,12 +152,7 @@ export async function askAgent(
 ): Promise<AgentAnswer> {
     const notion = await resolveNotionTools(options?.telegramUserId)
 
-    const primaryModel = process.env.OPENAI_AGENT_MODEL?.trim() || DEFAULT_AGENT_MODEL
-    const fallbackModel = process.env.OPENAI_AGENT_FALLBACK_MODEL?.trim() || DEFAULT_AGENT_FALLBACK_MODEL
-    const models = [
-        primaryModel,
-        ...(fallbackModel && fallbackModel !== primaryModel ? [fallbackModel] : [])
-    ]
+    const model = process.env.OPENAI_AGENT_MODEL?.trim() || DEFAULT_AGENT_MODEL
 
     const availableEmojiNames = Object.keys(emoji).join(", ")
     const messages: ModelMessage[] = [...history, { role: "user", content: question }]
@@ -174,36 +168,19 @@ export async function askAgent(
         })
     }
 
+    const agent = createAgentModel({
+        model,
+        availableEmojiNames,
+        notionTools: notion.tools,
+        notionLoginRequired: notion.loginRequired
+    })
+
     let rawAnswer: string | undefined
-    let lastError: unknown
-
-    for (let index = 0; index < models.length; index += 1) {
-        const model = models[index]
-        const agent = createAgentModel({
-            model,
-            availableEmojiNames,
-            notionTools: notion.tools,
-            notionLoginRequired: notion.loginRequired
-        })
-
-        try {
-            const result = await agent.generate({ messages })
-            rawAnswer = result.text?.trim()
-            break
-        } catch (error) {
-            lastError = error
-            const hasNextModel = index < models.length - 1
-
-            if (hasNextModel && isRateLimitError(error)) {
-                continue
-            }
-
-            throw normalizeAgentError(error)
-        }
-    }
-
-    if (!rawAnswer && lastError) {
-        throw normalizeAgentError(lastError)
+    try {
+        const result = await agent.generate({ messages })
+        rawAnswer = result.text?.trim()
+    } catch (error) {
+        throw normalizeAgentError(error)
     }
 
     if (!rawAnswer) {
