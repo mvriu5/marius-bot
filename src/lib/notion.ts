@@ -409,7 +409,7 @@ async function fetchAllNotionPageCandidates(client: Client): Promise<NotionPageC
     return pages
 }
 
-async function getValidAccessTokenForUser(telegramUserId: string) {
+export async function getValidAccessTokenForUser(telegramUserId: string) {
     const token = await getStateValue<StoredNotionToken>(keys.tokenKey(telegramUserId))
     if (!token?.accessToken) {
         const url = await createNotionAuthorizationUrl(telegramUserId)
