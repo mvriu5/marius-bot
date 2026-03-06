@@ -1,4 +1,4 @@
-import { Card, CardText } from "chat"
+import { Actions, Card, CardText, LinkButton } from "chat"
 import { Client } from "@upstash/qstash"
 import { ProviderError, UserError } from "../errors/appError.js"
 import { ButtonGrid } from "../components/buttonGrid.js"
@@ -272,9 +272,15 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
 
                 const { bot } = await import("../server/bot.js")
                 const adapter = bot.getAdapter("telegram")
-                await adapter.postMessage(
-                    task.threadId,
-                    `Copilot hat den PR noch nicht finalisiert. Issue: ${task.issueUrl}` as never
+                await adapter.postMessage(task.threadId,
+                    Card({
+                        title: "Copilot hat den PR noch nicht finalisiert.",
+                        children: [
+                            Actions([
+                                LinkButton({ label:"Öffnen", url: task.issueUrl})
+                            ])
+                        ]
+                    })
                 )
                 return
             }
@@ -291,7 +297,6 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
 
         const safeRepoFullName = escapeTelegramMarkdown(task.repoFullName)
         const safePrTitle = escapeTelegramMarkdown(pr.title)
-        const safeSummary = escapeTelegramMarkdown(summarizePrBody(pr.body))
         const prActions = [
             { url: pr.url, label: "PR öffnen" },
             { id: "c:copilot:merge", label: "Mergen", value: task.id },
@@ -338,9 +343,15 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
 
         const { bot } = await import("../server/bot.js")
         const adapter = bot.getAdapter("telegram")
-        await adapter.postMessage(
-            task.threadId,
-            `Copilot hat noch keinen PR erstellt. Issue: ${task.issueUrl}` as never
+        await adapter.postMessage(task.threadId,
+            Card({
+                title: "Copilot hat noch keinen PR erstellt.",
+                children: [
+                    Actions([
+                        LinkButton({ label:"Öffnen", url: task.issueUrl})
+                    ])
+                ]
+            })
         )
         return
     }
