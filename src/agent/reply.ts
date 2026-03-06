@@ -54,13 +54,11 @@ export async function postAgentReply(
     question: string,
     sourceMessage?: Message<unknown>
 ): Promise<void> {
+    const startedAt = Date.now()
     thread.startTyping()
 
     const telegramUserId = sourceMessage?.author.userId
-    const [, notionConfig] = await Promise.all([
-        thread.refresh(),
-        resolveNotionTools(telegramUserId)
-    ])
+    const notionConfigPromise = resolveNotionTools(telegramUserId)
 
     const history: ModelMessage[] = thread.recentMessages
         .filter((msg) => {
@@ -73,9 +71,16 @@ export async function postAgentReply(
             content: msg.text.trim()
         }))
 
+    const notionConfig = await notionConfigPromise
     const { textStream, getAnswer } = await streamAgent(question, history, {
         telegramUserId,
         notionConfig
+    })
+
+    console.info("[agent.latency] pre-stream-ms", {
+        durationMs: Date.now() - startedAt,
+        historyMessages: history.length,
+        notionMode: notionConfig.mode
     })
 
     const sentMessage = await thread.post(textStream)

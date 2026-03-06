@@ -1,8 +1,7 @@
 import { openai } from "@ai-sdk/openai"
 import { type ModelMessage, stepCountIs, type ToolSet, ToolLoopAgent } from "ai"
-import { emoji } from "chat"
 import { ProviderError } from "../errors/appError.js"
-import { getValidNotionMcpAccessTokenForUser, NotionMcpAuthorizationRequiredError } from "../lib/notionMcp.js"
+import { getValidNotionMcpAccessTokenIfConnected } from "../lib/notionMcp.js"
 
 type AgentAnswer = {
     text: string
@@ -102,7 +101,11 @@ export async function resolveNotionTools(telegramUserId?: string): Promise<Notio
 
     try {
         logMcp("token:load:start", { telegramUserId })
-        const accessToken = await getValidNotionMcpAccessTokenForUser(telegramUserId)
+        const accessToken = await getValidNotionMcpAccessTokenIfConnected(telegramUserId)
+        if (!accessToken) {
+            logMcp("token:missing", { telegramUserId })
+            return { loginRequired: true, mode: "none" }
+        }
         const serverUrl = process.env.NOTION_MCP_SERVER_URL?.trim() || DEFAULT_NOTION_MCP_SERVER_URL
         logMcp("token:load:ok", { telegramUserId, serverUrl })
 
@@ -121,11 +124,6 @@ export async function resolveNotionTools(telegramUserId?: string): Promise<Notio
         logMcp("tool:configured", { telegramUserId, mode: config.mode, serverUrl })
         return config
     } catch (error) {
-        if (error instanceof NotionMcpAuthorizationRequiredError) {
-            logMcp("token:missing", { telegramUserId })
-            return { loginRequired: true, mode: "none" }
-        }
-
         logMcp("token:load:error", {
             telegramUserId,
             error: collectErrorDetails(error)
@@ -136,14 +134,12 @@ export async function resolveNotionTools(telegramUserId?: string): Promise<Notio
 
 function createAgentModel(options: {
     model: string
-    availableEmojiNames: string
     notionTools: ToolSet | undefined
     notionLoginRequired: boolean
 }) {
     const instructions = [
         "Du bist ein hilfreicher Assistent. Antworte klar und knapp auf Deutsch.",
         "Nutze wenn sinnvoll Emojis aus dem Chat SDK als Token im Format :emoji_name:.",
-        `Verfuegbare Emoji-Namen: ${options.availableEmojiNames}.`,
         "Wenn eine Reaction zur letzten User-Nachricht hilfreich ist, fuege genau ein Token [reaction:emoji_name] hinzu.",
         "Wenn keine Reaction sinnvoll ist, fuege kein Reaction-Token hinzu."
     ]
@@ -205,12 +201,10 @@ export async function streamAgent(
         notionLoginRequired: notion.loginRequired
     })
 
-    const availableEmojiNames = Object.keys(emoji).join(", ")
     const messages = buildAgentMessages(question, history, options?.externalContext)
 
     const agent = createAgentModel({
         model,
-        availableEmojiNames,
         notionTools: notion.tools,
         notionLoginRequired: notion.loginRequired
     })
@@ -281,12 +275,10 @@ async function askAgent(
         notionLoginRequired: notion.loginRequired
     })
 
-    const availableEmojiNames = Object.keys(emoji).join(", ")
     const messages = buildAgentMessages(question, history, options?.externalContext)
 
     const agent = createAgentModel({
         model,
-        availableEmojiNames,
         notionTools: notion.tools,
         notionLoginRequired: notion.loginRequired
     })

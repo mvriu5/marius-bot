@@ -407,3 +407,36 @@ export async function getValidNotionMcpAccessTokenForUser(telegramUserId: string
         throw new NotionMcpAuthorizationRequiredError(authorizationUrl)
     }
 }
+
+export async function getValidNotionMcpAccessTokenIfConnected(telegramUserId: string): Promise<string | null> {
+    const token = await getStateValue<StoredNotionMcpToken>(keys.tokenKey(telegramUserId))
+    if (!token?.accessToken) return null
+
+    if (isTokenValid(token.expiresAt)) {
+        return token.accessToken
+    }
+
+    if (!token.refreshToken) return null
+
+    try {
+        const refreshed = await refreshAccessToken(
+            token.refreshToken,
+            token.tokenEndpoint,
+            token.clientId,
+            token.clientSecret
+        )
+
+        const updated: StoredNotionMcpToken = {
+            ...token,
+            accessToken: refreshed.access_token,
+            refreshToken: refreshed.refresh_token ?? token.refreshToken,
+            expiresAt: refreshed.expires_in ? Date.now() + refreshed.expires_in * 1000 : token.expiresAt,
+            scope: refreshed.scope ?? token.scope
+        }
+
+        await setStateValue<StoredNotionMcpToken>(keys.tokenKey(telegramUserId), updated)
+        return updated.accessToken
+    } catch {
+        return null
+    }
+}
