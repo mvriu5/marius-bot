@@ -90,7 +90,7 @@ export async function postAgentReply(
             remainingHistoryChars = Math.max(0, remainingHistoryChars - withBudget.length)
 
             return {
-                role: msg.author.isMe ? "assistant" : "user",
+                role: msg.author.isMe ? ("assistant" as const) : ("user" as const),
                 content: withBudget
             }
         })
