@@ -1,6 +1,6 @@
 import { Actions, Button, Card, CardText, LinkButton, emoji, type EmojiValue, type Message, type Thread } from "chat"
 import type { ModelMessage } from "ai"
-import { askAgent, resolveNotionTools } from "./agent.js"
+import { streamAgent, resolveNotionTools } from "./agent.js"
 import { extractTwoChoices } from "./choice.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
@@ -73,17 +73,21 @@ export async function postAgentReply(
             content: msg.text.trim()
         }))
 
-    const answer = await askAgent(question, history, {
+    const { textStream, getAnswer } = await streamAgent(question, history, {
         telegramUserId,
         notionConfig
     })
+
+    const sentMessage = await thread.post(textStream)
+
+    const answer = await getAnswer()
     const answerText = answer.text
     const renderedText = renderEmojiTokens(answerText)
     const urls = extractUrls(renderedText)
     const choices = extractTwoChoices(renderedText)
     const safeRenderedText = escapeTelegramMarkdown(renderedText)
 
-    await thread.post(
+    await sentMessage.edit(
         Card({
             children: [
                 CardText(safeRenderedText),
