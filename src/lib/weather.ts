@@ -73,18 +73,18 @@ function weatherCodeToText(code: number | undefined) {
 }
 
 function weatherCodeToEmoji(code: number | undefined) {
-    if (code === undefined) return "?"
+    if (code === undefined) return "❓"
 
-    if (code === 0 || code === 1) return "sun"
-    if (code === 2 || code === 3) return "cloud"
-    if (code === 45 || code === 48) return "fog"
-    if (code === 51 || code === 53 || code === 55) return "drizzle"
-    if (code === 61 || code === 63 || code === 65) return "rain"
-    if (code === 71 || code === 73 || code === 75) return "snow"
-    if (code === 80 || code === 81 || code === 82) return "showers"
-    if (code === 95) return "thunder"
+    if (code === 0 || code === 1) return "☀️"
+    if (code === 2 || code === 3) return "⛅"
+    if (code === 45 || code === 48) return "🌫️"
+    if (code === 51 || code === 53 || code === 55) return "🌦️"
+    if (code === 61 || code === 63 || code === 65) return "🌧️"
+    if (code === 71 || code === 73 || code === 75) return "🌨️"
+    if (code === 80 || code === 81 || code === 82) return "🌦️"
+    if (code === 95) return "⛈️"
 
-    return "weather"
+    return "🌡️"
 }
 
 async function resolveLocation(location?: string) {

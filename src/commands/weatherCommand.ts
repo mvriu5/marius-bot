@@ -82,17 +82,30 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
                 ? await getWeather(locationForQuery, 1)
                 : await getWeather(locationForQuery, 0)
             const formatTemp = (value: number | undefined) => value === undefined || Number.isNaN(value) ? "n/a" : `${value.toFixed(1)}C`
-            const forecastLabel = ctx.parsedArgs.day === "tomorrow" ? "Morgen" : "Heute"
+
+            if (ctx.parsedArgs.day === "tomorrow") {
+                await ctx.thread.post(
+                    Card({
+                        title: `Wetter Morgen (${summary.locationLabel})`,
+                        children: [
+                            CardText(`${summary.conditionEmoji} Prognose: ${summary.condition}`),
+                            CardText(`🔥 Min/Max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
+                            CardText(`💧 Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`),
+                        ]
+                    })
+                )
+                return
+            }
 
             await ctx.thread.post(
                 Card({
-                    title: `Wetter ${forecastLabel} (${summary.locationLabel})`,
+                    title: `Wetter Heute (${summary.locationLabel})`,
                     children: [
                         CardText(`${summary.conditionEmoji} Zustand: ${summary.condition}`),
-                        CardText(`Jetzt: ${formatTemp(summary.temperatureC)} (gefuehlt ${formatTemp(summary.apparentTemperatureC)})`),
-                        CardText(`Wind: ${summary.windSpeedKmh ?? "n/a"} km/h`),
-                        CardText(`${forecastLabel} min/max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
-                        CardText(`Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`)
+                        CardText(`✨ Jetzt: ${formatTemp(summary.temperatureC)} (gefuehlt ${formatTemp(summary.apparentTemperatureC)})`),
+                        CardText(`💨 Wind: ${summary.windSpeedKmh ?? "n/a"} km/h`),
+                        CardText(`🔥 Heute min/max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
+                        CardText(`💧 Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`)
                     ]
                 })
             )
