@@ -164,7 +164,109 @@ function createAgentModel(options: {
     })
 }
 
-export async function askAgent(
+type StreamAgentResult = {
+    textStream: AsyncIterable<string>
+    getAnswer: () => Promise<AgentAnswer>
+}
+
+function buildAgentMessages(
+    question: string,
+    history: ModelMessage[],
+    externalContext?: string
+): ModelMessage[] {
+    const messages: ModelMessage[] = [...history, { role: "user", content: question }]
+
+    if (externalContext?.trim()) {
+        messages.unshift({
+            role: "system",
+            content: [
+                "Zusatzkontext aus Notion (nutze ihn nur, wenn er zur Frage passt):",
+                externalContext.trim(),
+                "Wenn die Information darin nicht ausreicht, sage das offen."
+            ].join("\n\n")
+        })
+    }
+
+    return messages
+}
+
+export async function streamAgent(
+    question: string,
+    history: ModelMessage[] = [],
+    options?: AskAgentOptions
+): Promise<StreamAgentResult> {
+    const notion = options?.notionConfig ?? await resolveNotionTools(options?.telegramUserId)
+
+    const model = process.env.OPENAI_AGENT_MODEL?.trim() || DEFAULT_AGENT_MODEL
+    logMcp("agent:start", {
+        telegramUserId: options?.telegramUserId,
+        model,
+        notionMode: notion.mode,
+        notionLoginRequired: notion.loginRequired
+    })
+
+    const availableEmojiNames = Object.keys(emoji).join(", ")
+    const messages = buildAgentMessages(question, history, options?.externalContext)
+
+    const agent = createAgentModel({
+        model,
+        availableEmojiNames,
+        notionTools: notion.tools,
+        notionLoginRequired: notion.loginRequired
+    })
+
+    let capturedRawText = ""
+    let streamResult: Awaited<ReturnType<typeof agent.stream>>
+    try {
+        logMcp("agent:stream:start", { model, notionMode: notion.mode })
+        streamResult = await agent.stream({
+            messages,
+            onFinish: ({ text }) => {
+                capturedRawText = text?.trim() ?? ""
+                logMcp("agent:stream:finish", {
+                    model,
+                    notionMode: notion.mode,
+                    hasText: Boolean(capturedRawText),
+                    textLength: capturedRawText.length
+                })
+            }
+        })
+    } catch (error) {
+        logMcp("agent:stream:error", {
+            model,
+            notionMode: notion.mode,
+            error: collectErrorDetails(error)
+        })
+        throw normalizeAgentError(error)
+    }
+
+    return {
+        textStream: streamResult.textStream,
+        getAnswer: async () => {
+            // capturedRawText is populated by onFinish, which fires as the stream completes.
+            // Call getAnswer() only after the textStream has been fully consumed (e.g. after
+            // thread.post(textStream) resolves) to ensure onFinish has already executed.
+            // streamResult.text is a fallback PromiseLike that resolves the same value.
+            const rawAnswer = capturedRawText || (await streamResult.text)?.trim() || ""
+            if (!rawAnswer) {
+                throw new ProviderError(
+                    "openai",
+                    "OPENAI_EMPTY_RESPONSE",
+                    "Agent konnte keine Antwort erzeugen.",
+                    502,
+                    "OpenAI lieferte keine Antwort."
+                )
+            }
+            const parsed = parseAgentOutput(rawAnswer)
+            if (!parsed.text) {
+                return { text: "", reactionName: parsed.reactionName }
+            }
+            return parsed
+        }
+    }
+}
+
+async function askAgent(
     question: string,
     history: ModelMessage[] = [],
     options?: AskAgentOptions
@@ -180,18 +282,7 @@ export async function askAgent(
     })
 
     const availableEmojiNames = Object.keys(emoji).join(", ")
-    const messages: ModelMessage[] = [...history, { role: "user", content: question }]
-
-    if (options?.externalContext?.trim()) {
-        messages.unshift({
-            role: "system",
-            content: [
-                "Zusatzkontext aus Notion (nutze ihn nur, wenn er zur Frage passt):",
-                options.externalContext.trim(),
-                "Wenn die Information darin nicht ausreicht, sage das offen."
-            ].join("\n\n")
-        })
-    }
+    const messages = buildAgentMessages(question, history, options?.externalContext)
 
     const agent = createAgentModel({
         model,
