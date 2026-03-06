@@ -22,7 +22,11 @@ function resolveEmojiByName(name: string): EmojiValue | null {
 }
 
 function renderEmojiTokens(input: string): string {
-    return input.replace(/:([a-z0-9_]+):/gi, (full, rawName: string) => {
+    const normalized = input
+        .replace(/__emojiname:([a-z0-9_]+):__/gi, ":$1:")
+        .replace(/\bemojiname:([a-z0-9_]+):/gi, ":$1:")
+
+    return normalized.replace(/:([a-z0-9_]+):/gi, (full, rawName: string) => {
         const value = resolveEmojiByName(rawName.toLowerCase())
         return value ? value.toString() : full
     })
@@ -47,6 +51,11 @@ function extractUrls(text: string): string[] {
     }
 
     return urls
+}
+
+function isTelegramMessageNotModifiedError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    return error.message.toLowerCase().includes("message is not modified")
 }
 
 export async function postAgentReply(
@@ -91,46 +100,55 @@ export async function postAgentReply(
     const urls = extractUrls(renderedText)
     const choices = extractTwoChoices(renderedText)
     const safeRenderedText = escapeTelegramMarkdown(renderedText)
+    const hasChoices = Boolean(choices)
+    const hasUrls = urls.length > 0
+    const textChanged = renderedText !== answerText
 
-    await sentMessage.edit(
-        Card({
-            children: [
-                CardText(safeRenderedText),
-                ...(choices
-                    ? [
-                        Actions([
-                            Button({
-                                id: "agent:choice",
-                                label: choices[0].label,
-                                value: choices[0].value
-                            }),
-                            Button({
-                                id: "agent:choice",
-                                label: choices[1].label,
-                                value: choices[1].value
-                            })
-                        ])
+    if (textChanged || hasChoices || hasUrls) {
+        try {
+            await sentMessage.edit(
+                Card({
+                    children: [
+                        CardText(safeRenderedText),
+                        ...(choices
+                            ? [
+                                Actions([
+                                    Button({
+                                        id: "agent:choice",
+                                        label: choices[0].label,
+                                        value: choices[0].value
+                                    }),
+                                    Button({
+                                        id: "agent:choice",
+                                        label: choices[1].label,
+                                        value: choices[1].value
+                                    })
+                                ])
+                            ]
+                            : []),
+                        ...(urls.length > 0
+                            ? [
+                                Actions(
+                                    urls.map((url, index) => {
+                                        let label = `Link ${index + 1}`
+                                        try {
+                                            const host = new URL(url).hostname.replace(/^www\./i, "")
+                                            if (host) label = host
+                                        } catch {
+                                        }
+                                        return LinkButton({ label, url })
+                                    })
+                                )
+                            ]
+                            : [])
                     ]
-                    : [])
-                ,
-                ...(urls.length > 0
-                    ? [
-                        Actions(
-                            urls.map((url, index) => {
-                                let label = `Link ${index + 1}`
-                                try {
-                                    const host = new URL(url).hostname.replace(/^www\./i, "")
-                                    if (host) label = host
-                                } catch {
-                                }
-                                return LinkButton({ label, url })
-                            })
-                        )
-                    ]
-                    : [])
-            ]
-        })
-    )
+                })
+            )
+        } catch (error) {
+            if (!isTelegramMessageNotModifiedError(error)) throw error
+            console.info("[agent.reply] skipped redundant message edit")
+        }
+    }
 
     if (sourceMessage?.id && answer.reactionName) {
         const reaction = resolveEmojiByName(answer.reactionName)

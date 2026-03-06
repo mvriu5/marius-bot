@@ -140,6 +140,7 @@ function createAgentModel(options: {
     const instructions = [
         "Du bist ein hilfreicher Assistent. Antworte klar und knapp auf Deutsch.",
         "Nutze wenn sinnvoll Emojis aus dem Chat SDK als Token im Format :emoji_name:.",
+        "Nutze niemals Formate wie emojiname:...: oder __emojiname:...:__.",
         "Wenn eine Reaction zur letzten User-Nachricht hilfreich ist, fuege genau ein Token [reaction:emoji_name] hinzu.",
         "Wenn keine Reaction sinnvoll ist, fuege kein Reaction-Token hinzu."
     ]
