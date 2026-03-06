@@ -12,9 +12,10 @@ type AgentAnswer = {
 type AskAgentOptions = {
     telegramUserId?: string
     externalContext?: string
+    notionConfig?: NotionToolConfig
 }
 
-type NotionToolConfig = {
+export type NotionToolConfig = {
     tools?: ToolSet
     loginRequired: boolean
     mode: "none" | "mcp"
@@ -93,7 +94,7 @@ function parseAgentOutput(raw: string): AgentAnswer {
     }
 }
 
-async function resolveNotionTools(telegramUserId?: string): Promise<NotionToolConfig> {
+export async function resolveNotionTools(telegramUserId?: string): Promise<NotionToolConfig> {
     if (!telegramUserId) {
         logMcp("skipped:no-user")
         return { loginRequired: false, mode: "none" }
@@ -168,7 +169,7 @@ export async function askAgent(
     history: ModelMessage[] = [],
     options?: AskAgentOptions
 ): Promise<AgentAnswer> {
-    const notion = await resolveNotionTools(options?.telegramUserId)
+    const notion = options?.notionConfig ?? await resolveNotionTools(options?.telegramUserId)
 
     const model = process.env.OPENAI_AGENT_MODEL?.trim() || DEFAULT_AGENT_MODEL
     logMcp("agent:start", {
