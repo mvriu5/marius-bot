@@ -5,7 +5,14 @@ import { extractTwoChoices } from "./choice.js"
 
 type AgentThread = Thread<Record<string, unknown>, unknown>
 
-const MAX_HISTORY_MESSAGES = 10
+const MAX_HISTORY_MESSAGES = 6
+const MAX_HISTORY_MESSAGE_CHARS = 500
+const MAX_HISTORY_TOTAL_CHARS = 2500
+
+function truncateText(value: string, maxChars: number): string {
+    if (value.length <= maxChars) return value
+    return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
+}
 
 function escapeTelegramMarkdown(value: string): string {
     return value
@@ -69,16 +76,25 @@ export async function postAgentReply(
     const telegramUserId = sourceMessage?.author.userId
     const notionConfigPromise = resolveNotionTools(telegramUserId)
 
+    let remainingHistoryChars = MAX_HISTORY_TOTAL_CHARS
     const history: ModelMessage[] = thread.recentMessages
         .filter((msg) => {
             const text = msg.text.trim()
             return text && !text.startsWith("/")
         })
         .slice(-MAX_HISTORY_MESSAGES)
-        .map((msg) => ({
-            role: msg.author.isMe ? "assistant" : "user",
-            content: msg.text.trim()
-        }))
+        .map((msg) => {
+            const trimmed = msg.text.trim()
+            const perMessage = truncateText(trimmed, MAX_HISTORY_MESSAGE_CHARS)
+            const withBudget = truncateText(perMessage, remainingHistoryChars)
+            remainingHistoryChars = Math.max(0, remainingHistoryChars - withBudget.length)
+
+            return {
+                role: msg.author.isMe ? "assistant" : "user",
+                content: withBudget
+            }
+        })
+        .filter((msg) => Boolean(msg.content))
 
     const notionConfig = await notionConfigPromise
     const { textStream, getAnswer } = await streamAgent(question, history, {

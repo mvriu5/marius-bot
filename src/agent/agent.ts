@@ -22,6 +22,13 @@ export type NotionToolConfig = {
 
 const DEFAULT_AGENT_MODEL = "gpt-5-nano"
 const DEFAULT_NOTION_MCP_SERVER_URL = "https://mcp.notion.com/mcp"
+const MAX_QUESTION_CHARS = 2000
+const MAX_EXTERNAL_CONTEXT_CHARS = 1800
+
+function truncateText(value: string, maxChars: number): string {
+    if (value.length <= maxChars) return value
+    return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
+}
 
 function logMcp(event: string, data?: Record<string, unknown>) {
     if (data) {
@@ -155,7 +162,7 @@ function createAgentModel(options: {
 
     return new ToolLoopAgent({
         model: openai(options.model),
-        stopWhen: stepCountIs(20),
+        stopWhen: stepCountIs(8),
         instructions: instructions.join(" "),
         tools: options.notionTools
     })
@@ -171,14 +178,16 @@ function buildAgentMessages(
     history: ModelMessage[],
     externalContext?: string
 ): ModelMessage[] {
-    const messages: ModelMessage[] = [...history, { role: "user", content: question }]
+    const normalizedQuestion = truncateText(question.trim(), MAX_QUESTION_CHARS)
+    const messages: ModelMessage[] = [...history, { role: "user", content: normalizedQuestion }]
 
     if (externalContext?.trim()) {
+        const trimmedContext = truncateText(externalContext.trim(), MAX_EXTERNAL_CONTEXT_CHARS)
         messages.unshift({
             role: "system",
             content: [
                 "Zusatzkontext aus Notion (nutze ihn nur, wenn er zur Frage passt):",
-                externalContext.trim(),
+                trimmedContext,
                 "Wenn die Information darin nicht ausreicht, sage das offen."
             ].join("\n\n")
         })
