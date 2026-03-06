@@ -1,5 +1,6 @@
 import { Client, Receiver } from "@upstash/qstash"
 import { AuthError, ProviderError, UserError } from "../errors/appError.js"
+import { ensureStateConnected, state } from "../types/state.js"
 
 type ReminderPayload = {
     reminderId: string
@@ -21,6 +22,16 @@ type ScheduleReminderInput = {
     text: string
     dueAtMs: number
     timezone: string
+}
+
+const REMINDER_GRACE_TTL_MS = 86_400_000
+
+function reminderDataKey(reminderId: string) {
+    return `reminder:data:${reminderId}`
+}
+
+function reminderIndexKey(threadId: string, userId: string) {
+    return `reminder:index:${threadId}:${userId}`
 }
 
 function requireReminderConfig() {
@@ -75,6 +86,34 @@ function newReminderId() {
     return `rem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
+async function saveScheduledReminder(reminder: ScheduledReminder) {
+    await ensureStateConnected()
+
+    const indexKey = reminderIndexKey(reminder.threadId, reminder.userId)
+    const existingIds = (await state.get<string[]>(indexKey)) ?? []
+    const dedupedIds = Array.from(new Set([...existingIds, reminder.reminderId]))
+
+    await state.set(indexKey, dedupedIds)
+    const ttlMs = Math.max(1, reminder.dueAtMs - Date.now() + REMINDER_GRACE_TTL_MS)
+    await state.set(reminderDataKey(reminder.reminderId), reminder, ttlMs)
+}
+
+async function removeReminderFromState(reminderId: string, threadId: string, userId: string) {
+    await ensureStateConnected()
+    await state.delete(reminderDataKey(reminderId))
+
+    const indexKey = reminderIndexKey(threadId, userId)
+    const existingIds = (await state.get<string[]>(indexKey)) ?? []
+    const filteredIds = existingIds.filter((id) => id !== reminderId)
+
+    if (filteredIds.length === 0) {
+        await state.delete(indexKey)
+        return
+    }
+
+    await state.set(indexKey, filteredIds)
+}
+
 export async function scheduleReminder(input: ScheduleReminderInput): Promise<ScheduledReminder> {
     const text = input.text.trim()
     if (!text) {
@@ -110,10 +149,12 @@ export async function scheduleReminder(input: ScheduleReminderInput): Promise<Sc
             delay: delaySeconds
         })
 
-        return {
+        const scheduledReminder: ScheduledReminder = {
             ...payload,
             qstashMessageId: publishResult.messageId
         }
+        await saveScheduledReminder(scheduledReminder)
+        return scheduledReminder
     } catch (error) {
         throw new ProviderError(
             "qstash",
@@ -124,7 +165,44 @@ export async function scheduleReminder(input: ScheduleReminderInput): Promise<Sc
             error
         )
     }
+}
 
+export async function listScheduledReminders(threadId: string, userId: string): Promise<ScheduledReminder[]> {
+    await ensureStateConnected()
+    const indexKey = reminderIndexKey(threadId, userId)
+    const reminderIds = (await state.get<string[]>(indexKey)) ?? []
+
+    if (reminderIds.length === 0) return []
+
+    const now = Date.now()
+    const reminders = await Promise.all(
+        reminderIds.map(async (reminderId) => {
+            const reminder = await state.get<ScheduledReminder>(reminderDataKey(reminderId))
+            return reminder ?? null
+        })
+    )
+
+    const activeReminders: ScheduledReminder[] = []
+    const activeIds: string[] = []
+
+    for (const reminder of reminders) {
+        if (!reminder) continue
+        if (reminder.dueAtMs <= now) continue
+        activeReminders.push(reminder)
+        activeIds.push(reminder.reminderId)
+    }
+
+    if (activeIds.length === 0) {
+        await state.delete(indexKey)
+        return []
+    }
+
+    if (activeIds.length !== reminderIds.length) {
+        await state.set(indexKey, activeIds)
+    }
+
+    activeReminders.sort((left, right) => left.dueAtMs - right.dueAtMs)
+    return activeReminders
 }
 
 export async function verifyQstashSignature(input: {
@@ -180,5 +258,6 @@ export function parseReminderPayload(value: unknown): ReminderPayload {
 export async function deliverReminder(payload: ReminderPayload) {
     const { bot } = await import("../server/bot.js")
     const adapter = bot.getAdapter("telegram")
-    await adapter.postMessage(payload.threadId, `🕑 Erinnerung: ${payload.text}` as never)
+    await adapter.postMessage(payload.threadId, `Reminder: ${payload.text}` as never)
+    await removeReminderFromState(payload.reminderId, payload.threadId, payload.userId)
 }

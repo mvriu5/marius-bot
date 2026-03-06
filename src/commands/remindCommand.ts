@@ -1,14 +1,18 @@
 import { postThreadError } from "../errors/errorOutput.js"
-import { scheduleReminder } from "../lib/reminders.js"
+import { listScheduledReminders, scheduleReminder } from "../lib/reminders.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 import { UserError } from "../errors/appError.js"
+import { Card, CardText } from "chat"
 
-type RemindParsedArgs = {
-    durationToken?: string
-    dateToken?: string
-    timeToken: string
-    text: string
-}
+type RemindParsedArgs =
+    | { mode: "list" }
+    | {
+        mode: "create"
+        durationToken?: string
+        dateToken?: string
+        timeToken: string
+        text: string
+    }
 
 type DateParts = {
     year: number
@@ -185,36 +189,91 @@ function parseDueAtMs(
     return dueAtMs
 }
 
+function formatDueAt(dueAtMs: number, timezone: string) {
+    try {
+        return new Intl.DateTimeFormat("de-DE", {
+            timeZone: timezone,
+            dateStyle: "medium",
+            timeStyle: "short"
+        }).format(new Date(dueAtMs))
+    } catch {
+        return new Date(dueAtMs).toISOString()
+    }
+}
+
+function formatRemaining(remainingMs: number) {
+    if (remainingMs <= 0) return "jetzt"
+
+    const totalMinutes = Math.ceil(remainingMs / 60_000)
+    const days = Math.floor(totalMinutes / (24 * 60))
+    const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
+    const minutes = totalMinutes % 60
+
+    const parts: string[] = []
+    if (days > 0) parts.push(`${days}d`)
+    if (hours > 0) parts.push(`${hours}h`)
+    if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`)
+
+    return `in ${parts.join(" ")}`
+}
+
 const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
     name: "remind",
     argPolicy: { type: "any" },
     parseArgs: (args) => {
+        if (args.length === 1 && args[0].toLowerCase() === "list") {
+            return { ok: true, value: { mode: "list" } }
+        }
+
         if (args.length < 2) {
-            return { ok: false, message: "Nutzung: /remind <duration|time|datetime> <text>" }
+            return { ok: false, message: "Nutzung: /remind list oder /remind <duration|time|datetime> <text>" }
         }
 
         if (isDurationToken(args[0])) {
             const text = args.slice(1).join(" ").trim()
             if (!text) return { ok: false, message: "Bitte gib einen Erinnerungstext an." }
-            return { ok: true, value: { durationToken: args[0], timeToken: "00:00", text } }
+            return { ok: true, value: { mode: "create", durationToken: args[0], timeToken: "00:00", text } }
         }
 
         if (isTimeToken(args[0])) {
             const text = args.slice(1).join(" ").trim()
             if (!text) return { ok: false, message: "Bitte gib einen Erinnerungstext an." }
-            return { ok: true, value: { timeToken: args[0], text } }
+            return { ok: true, value: { mode: "create", timeToken: args[0], text } }
         }
 
         if (args.length >= 3 && isDateToken(args[0]) && isTimeToken(args[1])) {
             const text = args.slice(2).join(" ").trim()
             if (!text) return { ok: false, message: "Bitte gib einen Erinnerungstext an." }
-            return { ok: true, value: { dateToken: args[0], timeToken: args[1], text } }
+            return { ok: true, value: { mode: "create", dateToken: args[0], timeToken: args[1], text } }
         }
 
-        return { ok: false, message: "Nutzung: /remind <duration|time|datetime> <text>" }
+        return { ok: false, message: "Nutzung: /remind list oder /remind <duration|time|datetime> <text>" }
     },
     execute: async (ctx) => {
         try {
+            if (ctx.parsedArgs.mode === "list") {
+                const reminders = await listScheduledReminders(ctx.thread.id, ctx.message.author.userId)
+                if (reminders.length === 0) {
+                    await ctx.thread.post("Keine aktiven Reminder gefunden.")
+                    return
+                }
+
+                const now = Date.now()
+                const lines = reminders.map((reminder, index) => {
+                    const dueAt = formatDueAt(reminder.dueAtMs, reminder.timezone)
+                    const remaining = formatRemaining(reminder.dueAtMs - now)
+                    return `${index + 1}. ${dueAt} (${remaining}) - ${reminder.text}`
+                })
+
+                await ctx.thread.post(Card({
+                    title: "⏰ Aktive Reminder:",
+                    children: [
+                        ...lines.map((line) => CardText(line))
+                    ]
+                }))
+                return
+            }
+
             const timezone = getReminderTimezone()
             const dueAtMs = parseDueAtMs(
                 ctx.parsedArgs.dateToken,
@@ -230,7 +289,7 @@ const remindCommand: CommandDefinition<"remind", RemindParsedArgs> = {
                 timezone
             })
 
-            await ctx.thread.post(`🤙 Erinnerung gesetzt!`)
+            await ctx.thread.post("🤙 Erinnerung gesetzt!")
         } catch (error) {
             await postThreadError(ctx.thread, error, "Reminder konnte nicht gesetzt werden")
         }
