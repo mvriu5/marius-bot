@@ -1,7 +1,9 @@
 import { postAgentReply } from "../agent/reply.js"
 import { postThreadError } from "../errors/errorOutput.js"
 import { activateAgentSession } from "../agent/session.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { parseOptionalJoinedArg } from "../lib/commandParsers.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { defineCommandModule } from "./shared/module.js"
 
 type AgentParsedArgs = {
     question?: string
@@ -10,10 +12,7 @@ type AgentParsedArgs = {
 const agentCommand: CommandDefinition<"agent", AgentParsedArgs> = {
     name: "agent",
     argPolicy: { type: "any" },
-    parseArgs: (args) => {
-        const question = args.join(" ").trim()
-        return { ok: true, value: { question: question || undefined } }
-    },
+    parseArgs: (args) => parseOptionalJoinedArg(args, "question"),
     execute: async (ctx) => {
         try {
             await activateAgentSession(ctx.thread.id, ctx.message.author.userId)
@@ -30,4 +29,12 @@ const agentCommand: CommandDefinition<"agent", AgentParsedArgs> = {
     }
 }
 
-export const agent = new Command(agentCommand)
+export const agent = createCommand(agentCommand)
+
+export const agentModule = defineCommandModule({
+    command: agent,
+    description: "Aktiviert den Agent-Modus oder beantwortet eine Frage.",
+    aliases: ["ai", "gpt", "ask"] as const,
+    subcommands: ["<frage>"] as const,
+    actionIds: [] as const
+})

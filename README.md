@@ -71,6 +71,26 @@ Mindestens für Basisbetrieb:
 - `/fitbit login` Fitbit verbinden
 - `/weather`, `/news`, `/remind`, `/analytics`, `/account`, `/clear`
 
+## Neuen Command hinzufügen
+
+Die Command-Registry ist deklarativ aufgebaut: Jeder Command exportiert seinen Handler plus Metadaten als `...Module`.
+
+1. Command-Datei anlegen oder erweitern (`src/commands/<name>Command.ts`):
+   - `export const <name> = createCommand(...)`
+   - `export const <name>Module = defineCommandModule({ command: <name>, description, aliases, subcommands, actionIds })`
+2. Modul in [`src/commands/index.ts`](src/commands/index.ts) eintragen (Import + `commandModules`-Array).
+3. Optional Action-IDs in [`src/commands/shared/actionIds.ts`](src/commands/shared/actionIds.ts) ergänzen.
+
+Danach ist der Command automatisch in `/help`, Action-Dispatch und Registry verfügbar.
+
+## Projektstruktur
+
+- `src/commands`: Bot-Commands (inkl. deklarativer `...Module`-Exporte)
+- `src/commands/copilot`: gesplitteter Command (`index`, `parse`, `service`, `cards`)
+- `src/integrations`: API/OAuth-Integrationen (GitHub, Notion, Google, Fitbit, Weather, News, Plausible)
+- `src/ui`: wiederverwendbare Chat-UI-Helfer (`buttonGrid`, OAuth-Cards, Buttons, Cards)
+- `src/lib`: generische Utilities, Parser, Date/Time- und Domain-nahe Hilfslogik
+
 ## Notion im Agent-Modus
 
 Der Agent nutzt zwei interne Tools:

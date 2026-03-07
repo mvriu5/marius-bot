@@ -1,4 +1,4 @@
-import { Actions, Button, Card, CardText, LinkButton, type Thread } from "chat"
+import { Actions, Button, Card, CardText } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
 import {
     FitbitAuthorizationRequiredError,
@@ -7,52 +7,40 @@ import {
     getFitbitData,
     getFitbitWeekActivityData,
     isFitbitConnected
-} from "../lib/fitbit.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+} from "../integrations/fitbit.js"
+import { formatMinutesCompact } from "../lib/dateTimeFormat.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { postOAuthLoginCard } from "../ui/oauthCards.js"
+import { parseMenuActionArgs } from "../lib/commandArgs.js"
+import { ACTION_IDS } from "./shared/actionIds.js"
+import { defineCommandModule } from "./shared/module.js"
 
 type FitbitAction = "menu" | "login" | "summary" | "activity" | "week"
 type FitbitParsedArgs = {
     action: FitbitAction
 }
 
-async function postFitbitLoginCard(
-    thread: Thread<Record<string, unknown>, unknown>,
-    authorizationUrl: string,
-    text = "Bitte verbinde zuerst Fitbit:"
-) {
-    await thread.post(
-        Card({
-            title: "Fitbit Login",
-            children: [
-                CardText(text),
-                Actions([
-                    LinkButton({ url: authorizationUrl, label: "Login" })
-                ])
-            ]
-        })
-    )
-}
-
 async function handleFitbitAuthorizationError(
-    thread: Thread<Record<string, unknown>, unknown>,
+    thread: Parameters<typeof postOAuthLoginCard>[0],
     error: unknown
 ) {
     if (!(error instanceof FitbitAuthorizationRequiredError)) return false
-    await postFitbitLoginCard(thread, error.authorizationUrl)
+    await postOAuthLoginCard(thread, {
+        title: "Fitbit Login",
+        text: "Bitte verbinde zuerst Fitbit:",
+        authorizationUrl: error.authorizationUrl
+    })
     return true
 }
 
 const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
     name: "fitbit",
     argPolicy: { type: "max", max: 1 },
-    parseArgs: (args) => {
-        const action = args[0]
-        if (!action) return { ok: true, value: { action: "menu" as const } }
-        if (action === "login" || action === "summary" || action === "activity" || action === "week") {
-            return { ok: true, value: { action } }
-        }
-        return { ok: false, message: "Unbekannter Fitbit-Subcommand" }
-    },
+    parseArgs: (args) => parseMenuActionArgs(args, {
+        defaultAction: "menu",
+        allowedActions: ["login", "summary", "activity", "week"] as const,
+        unknownActionMessage: "Unbekannter Fitbit-Subcommand"
+    }),
     execute: async (ctx) => {
         const { action } = ctx.parsedArgs
         if (action === "menu") {
@@ -62,7 +50,11 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
             if (!connected) {
                 try {
                     const authorizationUrl = await createFitbitAuthorizationUrl(userId)
-                    await postFitbitLoginCard(ctx.thread, authorizationUrl)
+                    await postOAuthLoginCard(ctx.thread, {
+                        title: "Fitbit Login",
+                        text: "Bitte verbinde zuerst Fitbit:",
+                        authorizationUrl
+                    })
                 } catch (error) {
                     await postThreadError(ctx.thread, error, "Fitbit Login konnte nicht gestartet werden")
                 }
@@ -76,17 +68,17 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                         CardText("Wähle einen Subcommand:"),
                         Actions([
                             Button({
-                                id: "command:fitbit:summary",
+                                id: ACTION_IDS.fitbit.summary,
                                 label: "Summary",
                                 value: "fitbit summary"
                             }),
                             Button({
-                                id: "command:fitbit:activity",
+                                id: ACTION_IDS.fitbit.activity,
                                 label: "Activity",
                                 value: "fitbit activity"
                             }),
                             Button({
-                                id: "command:fitbit:week",
+                                id: ACTION_IDS.fitbit.week,
                                 label: "Week",
                                 value: "fitbit week"
                             })
@@ -100,7 +92,11 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
         if (action === "login") {
             try {
                 const authorizationUrl = await createFitbitAuthorizationUrl(ctx.message.author.userId)
-                await postFitbitLoginCard(ctx.thread, authorizationUrl, "Bitte verbinde Fitbit hier:")
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "Fitbit Login",
+                    text: "Bitte verbinde Fitbit hier:",
+                    authorizationUrl
+                })
             } catch (error) {
                 await postThreadError(ctx.thread, error, "Fitbit Login konnte nicht gestartet werden")
             }
@@ -110,13 +106,6 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
         if (action === "activity") {
             try {
                 const activity = await getFitbitActivityData(ctx.message.author.userId)
-                const formatMinutes = (totalMinutes: number) => {
-                    if (!totalMinutes || totalMinutes <= 0) return "0m"
-                    const hours = Math.floor(totalMinutes / 60)
-                    const minutes = totalMinutes % 60
-                    if (hours === 0) return `${minutes}m`
-                    return `${hours}h ${minutes}m`
-                }
 
                 await ctx.thread.post(
                     Card({
@@ -127,7 +116,7 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
                             CardText(`Kalorien: ${activity.caloriesOut}`),
                             CardText(`Stockwerke: ${activity.floors}`),
                             CardText(
-                                `Aktive Minuten: ${formatMinutes(activity.activeMinutes)} `
+                                `Aktive Minuten: ${formatMinutesCompact(activity.activeMinutes)} `
                                 + `(leicht ${activity.lightlyActiveMinutes}m, fair ${activity.fairlyActiveMinutes}m, intensiv ${activity.veryActiveMinutes}m)`
                             )
                         ]
@@ -171,19 +160,12 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
 
         try {
             const summary = await getFitbitData(ctx.message.author.userId)
-            const formatMinutes = (totalMinutes: number) => {
-                if (!totalMinutes || totalMinutes <= 0) return "0m"
-                const hours = Math.floor(totalMinutes / 60)
-                const minutes = totalMinutes % 60
-                if (hours === 0) return `${minutes}m`
-                return `${hours}h ${minutes}m`
-            }
 
             await ctx.thread.post(
                 Card({
                     title: "Fitbit Tagesübersicht",
                     children: [
-                        CardText(`Schlaf: ${formatMinutes(summary.totalMinutesAsleep)} (im Bett: ${formatMinutes(summary.totalTimeInBed)})`),
+                        CardText(`Schlaf: ${formatMinutesCompact(summary.totalMinutesAsleep)} (im Bett: ${formatMinutesCompact(summary.totalTimeInBed)})`),
                         CardText(`HRV (daily RMSSD): ${summary.hrvDailyRmssd ?? "n/a"} ms`),
                         CardText(`Tiefste Herzfrequenz: ${summary.lowestHeartRate ?? "n/a"} bpm`)
                     ]
@@ -196,4 +178,12 @@ const fitbitCommand: CommandDefinition<"fitbit", FitbitParsedArgs> = {
     }
 }
 
-export const fitbit = new Command(fitbitCommand)
+export const fitbit = createCommand(fitbitCommand)
+
+export const fitbitModule = defineCommandModule({
+    command: fitbit,
+    description: "Zeigt Fitbit-Daten und Login-Optionen.",
+    aliases: ["fb"] as const,
+    subcommands: ["login", "summary", "activity", "week"] as const,
+    actionIds: [ACTION_IDS.fitbit.login, ACTION_IDS.fitbit.summary, ACTION_IDS.fitbit.activity, ACTION_IDS.fitbit.week] as const
+})

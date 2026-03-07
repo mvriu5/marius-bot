@@ -1,12 +1,12 @@
 import { Actions, Card, CardText, LinkButton } from "chat"
 import { Client } from "@upstash/qstash"
 import { ProviderError, UserError } from "../errors/appError.js"
-import { ButtonGrid } from "../components/buttonGrid.js"
+import { ButtonGrid } from "../ui/buttonGrid.js"
 import { ensureStateConnected, state } from "../types/state.js"
 import {
     createCopilotIssueTask,
     findCopilotPrForIssue
-} from "./github.js"
+} from "../integrations/github.js"
 import { transitionCopilotPinnedMessage } from "./copilotPins.js"
 
 const COPILOT_PENDING_KEY = "copilot:pending:"

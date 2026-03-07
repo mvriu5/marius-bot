@@ -1,12 +1,14 @@
 import { Card, CardText } from "chat"
-import { ButtonGrid } from "../components/buttonGrid.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { ButtonGrid } from "../ui/buttonGrid.js"
+import { parseNoArgs } from "../lib/commandParsers.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
 import { capitalizeFirstLetter } from "../lib/utils.js"
+import { defineCommandModule } from "./shared/module.js"
 
 const helpCommand: CommandDefinition<"help", {}> = {
     name: "help",
     argPolicy: { type: "none" },
-    parseArgs: () => ({ ok: true, value: {} }),
+    parseArgs: parseNoArgs,
     execute: async (ctx) => {
         const { COMMAND_ENTRIES, COMMAND_METADATA } = await import("../server/registry.js")
         const commandLines = COMMAND_ENTRIES.map(({ command }) => {
@@ -32,4 +34,12 @@ const helpCommand: CommandDefinition<"help", {}> = {
     }
 }
 
-export const help = new Command(helpCommand)
+export const help = createCommand(helpCommand)
+
+export const helpModule = defineCommandModule({
+    command: help,
+    description: "Zeigt alle verfügbaren Befehle.",
+    aliases: ["h"] as const,
+    subcommands: [] as const,
+    actionIds: [] as const
+})

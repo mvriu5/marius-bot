@@ -1,7 +1,10 @@
 import { Card, CardText, Divider } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
-import { getPlausibleLast24HoursAnalytics } from "../lib/plausible.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { parseOptionalJoinedArg } from "../lib/commandParsers.js"
+import { formatPercent, formatSecondsHuman } from "../lib/dateTimeFormat.js"
+import { getPlausibleLast24HoursAnalytics } from "../integrations/plausible.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { defineCommandModule } from "./shared/module.js"
 
 type AnalyticsParsedArgs = {
     siteQuery?: string
@@ -10,25 +13,10 @@ type AnalyticsParsedArgs = {
 const analyticsCommand: CommandDefinition<"analytics", AnalyticsParsedArgs> = {
     name: "analytics",
     argPolicy: { type: "any" },
-    parseArgs: (args) => {
-        const siteQuery = args.join(" ").trim()
-        return { ok: true, value: { siteQuery: siteQuery || undefined } }
-    },
+    parseArgs: (args) => parseOptionalJoinedArg(args, "siteQuery"),
     execute: async (ctx) => {
         try {
             const summary = await getPlausibleLast24HoursAnalytics(ctx.parsedArgs.siteQuery)
-
-            const formatPercent = (value: number | null) =>
-                value === null || Number.isNaN(value) ? "n/a" : `${value.toFixed(1)}%`
-
-            const formatSeconds = (value: number | null) => {
-                if (value === null || Number.isNaN(value)) return "n/a"
-                const rounded = Math.round(value)
-                const mins = Math.floor(rounded / 60)
-                const secs = rounded % 60
-                if (mins <= 0) return `${secs}s`
-                return `${mins}m ${secs}s`
-            }
 
             await ctx.thread.post(
                 Card({
@@ -39,7 +27,7 @@ const analyticsCommand: CommandDefinition<"analytics", AnalyticsParsedArgs> = {
                             CardText(`🔎 Visitors: ${site.metrics.visitors}`),
                             CardText(`📈 Pageviews: ${site.metrics.pageviews}`),
                             CardText(`📉 Bounce Rate: ${formatPercent(site.metrics.bounceRatePct)}`),
-                            CardText(`🕤 Visit Duration: ${formatSeconds(site.metrics.visitDurationSec)}`),
+                            CardText(`🕤 Visit Duration: ${formatSecondsHuman(site.metrics.visitDurationSec)}`),
                             ...(index < summary.sites.length - 1 ? [Divider()] : [])
                         ]),
                         ...(summary.errors.length > 0
@@ -54,4 +42,12 @@ const analyticsCommand: CommandDefinition<"analytics", AnalyticsParsedArgs> = {
     }
 }
 
-export const analytics = new Command(analyticsCommand)
+export const analytics = createCommand(analyticsCommand)
+
+export const analyticsModule = defineCommandModule({
+    command: analytics,
+    description: "Zeigt Website-Analytics der letzten 24 Stunden.",
+    aliases: [] as const,
+    subcommands: ["<site (optional)>"] as const,
+    actionIds: [] as const
+})

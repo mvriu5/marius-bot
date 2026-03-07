@@ -74,3 +74,10 @@ export class Command<
         })
     }
 }
+
+export function createCommand<
+    Name extends string,
+    ParsedArgs = unknown
+>(init: CommandDefinition<Name, ParsedArgs>) {
+    return new Command(init)
+}

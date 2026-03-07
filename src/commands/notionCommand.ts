@@ -1,40 +1,27 @@
-import { Actions, Button, Card, CardText, LinkButton, type Thread } from "chat"
+import { Actions, Button, Card, CardText } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
-import { NotionAuthorizationRequiredError, createNotionAuthorizationUrl, getNotionPages, isNotionConnected } from "../lib/notion.js"
-import { createNotionMcpAuthorizationUrl, isNotionMcpConnected } from "../lib/notionMcp.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { NotionAuthorizationRequiredError, createNotionAuthorizationUrl, getNotionPages, isNotionConnected } from "../integrations/notion.js"
+import { createNotionMcpAuthorizationUrl, isNotionMcpConnected } from "../integrations/notionMcp.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { parseMenuActionArgs } from "../lib/commandArgs.js"
+import { ACTION_IDS } from "./shared/actionIds.js"
+import { postOAuthLoginCard } from "../ui/oauthCards.js"
+import { definedButtons } from "../ui/buttons.js"
+import { defineCommandModule } from "./shared/module.js"
 
 type NotionAction = "menu" | "login" | "pages" | "mcp-login"
 type NotionParsedArgs = {
     action: NotionAction
 }
 
-async function postNotionLoginCard(
-    thread: Thread<Record<string, unknown>, unknown>,
-    authorizationUrl: string,
-    title: string,
-    text: string
-) {
-    await thread.post(
-        Card({
-            title,
-            children: [
-                CardText(text),
-                Actions([LinkButton({ url: authorizationUrl, label: "Login" })])
-            ]
-        })
-    )
-}
-
 const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
     name: "notion",
     argPolicy: { type: "max", max: 1 },
-    parseArgs: (args) => {
-        const action = args[0]
-        if (!action) return { ok: true, value: { action: "menu" as const } }
-        if (action === "login" || action === "pages" || action === "mcp-login") return { ok: true, value: { action } }
-        return { ok: false, message: "Unbekannter Notion-Subcommand" }
-    },
+    parseArgs: (args) => parseMenuActionArgs(args, {
+        defaultAction: "menu",
+        allowedActions: ["login", "pages", "mcp-login"] as const,
+        unknownActionMessage: "Unbekannter Notion-Subcommand"
+    }),
     execute: async (ctx) => {
         const { action } = ctx.parsedArgs
         const userId = ctx.message.author.userId
@@ -52,11 +39,11 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
                 ].join("\n")
 
                 const buttons = [
-                    !notionConnected && Button({ id: "command:notion:login", label: "Notion Login", value: "notion login" }),
-                    notionConnected && Button({ id: "command:notion:pages", label: "Pages", value: "notion pages" }),
-                    !notionMcpConnected && Button({ id: "command:notion:mcp-login", label: "MCP Login", value: "notion mcp-login" })
+                    !notionConnected && Button({ id: ACTION_IDS.notion.login, label: "Notion Login", value: "notion login" }),
+                    notionConnected && Button({ id: ACTION_IDS.notion.pages, label: "Pages", value: "notion pages" }),
+                    !notionMcpConnected && Button({ id: ACTION_IDS.notion.mcpLogin, label: "MCP Login", value: "notion mcp-login" })
                 ]
-                const availableButtons = buttons.filter((item): item is Exclude<typeof item, false> => Boolean(item))
+                const availableButtons = definedButtons(buttons)
 
                 await ctx.thread.post(
                     Card({
@@ -76,12 +63,11 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
         if (action === "login") {
             try {
                 const authorizationUrl = await createNotionAuthorizationUrl(userId)
-                await postNotionLoginCard(
-                    ctx.thread,
-                    authorizationUrl,
-                    "Notion Login",
-                    "Bitte verbinde Notion hier:"
-                )
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "Notion Login",
+                    text: "Bitte verbinde Notion hier:",
+                    authorizationUrl
+                })
             } catch (error) {
                 await postThreadError(ctx.thread, error, "Notion Login konnte nicht gestartet werden")
             }
@@ -91,12 +77,11 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
         if (action === "mcp-login") {
             try {
                 const authorizationUrl = await createNotionMcpAuthorizationUrl(userId)
-                await postNotionLoginCard(
-                    ctx.thread,
-                    authorizationUrl,
-                    "Notion MCP Login",
-                    "Bitte verbinde Notion MCP hier:"
-                )
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "Notion MCP Login",
+                    text: "Bitte verbinde Notion MCP hier:",
+                    authorizationUrl
+                })
             } catch (error) {
                 await postThreadError(ctx.thread, error, "Notion MCP Login konnte nicht gestartet werden")
             }
@@ -124,12 +109,11 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
             )
         } catch (error) {
             if (error instanceof NotionAuthorizationRequiredError) {
-                await postNotionLoginCard(
-                    ctx.thread,
-                    error.authorizationUrl,
-                    "Notion Login",
-                    "Bitte verbinde zuerst Notion:"
-                )
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "Notion Login",
+                    text: "Bitte verbinde zuerst Notion:",
+                    authorizationUrl: error.authorizationUrl
+                })
                 return
             }
             await postThreadError(ctx.thread, error, "Notion Pages konnten nicht geladen werden")
@@ -137,4 +121,12 @@ const notionCommand: CommandDefinition<"notion", NotionParsedArgs> = {
     }
 }
 
-export const notion = new Command(notionCommand)
+export const notion = createCommand(notionCommand)
+
+export const notionModule = defineCommandModule({
+    command: notion,
+    description: "Verwaltet Notion-Integration (Login, Seitenauflistung).",
+    aliases: [] as const,
+    subcommands: ["login", "mcp-login", "pages"] as const,
+    actionIds: [ACTION_IDS.notion.login, ACTION_IDS.notion.mcpLogin, ACTION_IDS.notion.pages] as const
+})

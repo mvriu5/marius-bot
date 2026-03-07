@@ -1,16 +1,20 @@
 import { Actions, Button, Card, CardText } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
-import { isFitbitConnected } from "../lib/fitbit.js"
-import { isGithubConnected } from "../lib/github.js"
-import { isGoogleCalendarConnected } from "../lib/googleCalendar.js"
-import { isNotionConnected } from "../lib/notion.js"
-import { isNotionMcpConnected } from "../lib/notionMcp.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { isFitbitConnected } from "../integrations/fitbit.js"
+import { isGithubConnected } from "../integrations/github.js"
+import { isGoogleCalendarConnected } from "../integrations/googleCalendar.js"
+import { isNotionConnected } from "../integrations/notion.js"
+import { isNotionMcpConnected } from "../integrations/notionMcp.js"
+import { parseNoArgs } from "../lib/commandParsers.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { ACTION_IDS } from "./shared/actionIds.js"
+import { defineCommandModule } from "./shared/module.js"
+import { definedButtons } from "../ui/buttons.js"
 
 const accountCommand: CommandDefinition<"account", {}> = {
     name: "account",
     argPolicy: { type: "none" },
-    parseArgs: () => ({ ok: true, value: {} }),
+    parseArgs: parseNoArgs,
     execute: async (ctx) => {
         try {
             const userId = ctx.message.author.userId
@@ -31,13 +35,13 @@ const accountCommand: CommandDefinition<"account", {}> = {
             ]
 
             const loginButtons = [
-                !fitbitConnected && Button({ id: "command:fitbit:login", label: "Connect Fitbit", value: "fitbit login" }),
-                !googleConnected && Button({ id: "command:meetings:login", label: "Connect Google", value: "meetings login" }),
-                !githubConnected && Button({ id: "command:github:login", label: "Connect GitHub", value: "github login" }),
-                !notionConnected && Button({ id: "command:notion:login", label: "Connect Notion", value: "notion login" }),
-                !notionMcpConnected && Button({ id: "command:notion:mcp-login", label: "Connect Notion MCP", value: "notion mcp-login" })
+                !fitbitConnected && Button({ id: ACTION_IDS.fitbit.login, label: "Connect Fitbit", value: "fitbit login" }),
+                !googleConnected && Button({ id: ACTION_IDS.meetings.login, label: "Connect Google", value: "meetings login" }),
+                !githubConnected && Button({ id: ACTION_IDS.github.login, label: "Connect GitHub", value: "github login" }),
+                !notionConnected && Button({ id: ACTION_IDS.notion.login, label: "Connect Notion", value: "notion login" }),
+                !notionMcpConnected && Button({ id: ACTION_IDS.notion.mcpLogin, label: "Connect Notion MCP", value: "notion mcp-login" })
             ]
-            const availableLoginButtons = loginButtons.filter((button): button is Exclude<typeof button, false> => Boolean(button))
+            const availableLoginButtons = definedButtons(loginButtons)
 
             await ctx.thread.post(
                 Card({
@@ -59,4 +63,12 @@ const accountCommand: CommandDefinition<"account", {}> = {
     }
 }
 
-export const account = new Command(accountCommand)
+export const account = createCommand(accountCommand)
+
+export const accountModule = defineCommandModule({
+    command: account,
+    description: "Zeigt den Verbindungsstatus aller Integrationen.",
+    aliases: ["acc"] as const,
+    subcommands: [] as const,
+    actionIds: [] as const
+})

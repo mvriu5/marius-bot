@@ -1,11 +1,13 @@
 import { Card, CardText } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
+import { formatTemperatureC } from "../lib/dateTimeFormat.js"
 import {
     getRememberedWeatherLocation,
     getWeather,
     rememberWeatherLocation
-} from "../lib/weather.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+} from "../integrations/weather.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { defineCommandModule } from "./shared/module.js"
 
 type WeatherParsedArgs =
     | { mode: "set"; location: string }
@@ -81,7 +83,6 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
             const summary = ctx.parsedArgs.day === "tomorrow"
                 ? await getWeather(locationForQuery, 1)
                 : await getWeather(locationForQuery, 0)
-            const formatTemp = (value: number | undefined) => value === undefined || Number.isNaN(value) ? "n/a" : `${value.toFixed(1)}C`
 
             if (ctx.parsedArgs.day === "tomorrow") {
                 await ctx.thread.post(
@@ -89,7 +90,7 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
                         title: `Wetter Morgen (${summary.locationLabel})`,
                         children: [
                             CardText(`${summary.conditionEmoji} Prognose: ${summary.condition}`),
-                            CardText(`🔥 Min/Max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
+                            CardText(`🔥 Min/Max: ${formatTemperatureC(summary.minTempC)} / ${formatTemperatureC(summary.maxTempC)}`),
                             CardText(`💧 Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`),
                         ]
                     })
@@ -102,9 +103,9 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
                     title: `Wetter Heute (${summary.locationLabel})`,
                     children: [
                         CardText(`${summary.conditionEmoji} Zustand: ${summary.condition}`),
-                        CardText(`✨ Jetzt: ${formatTemp(summary.temperatureC)} (gefuehlt ${formatTemp(summary.apparentTemperatureC)})`),
+                        CardText(`✨ Jetzt: ${formatTemperatureC(summary.temperatureC)} (gefuehlt ${formatTemperatureC(summary.apparentTemperatureC)})`),
                         CardText(`💨 Wind: ${summary.windSpeedKmh ?? "n/a"} km/h`),
-                        CardText(`🔥 Heute min/max: ${formatTemp(summary.minTempC)} / ${formatTemp(summary.maxTempC)}`),
+                        CardText(`🔥 Heute min/max: ${formatTemperatureC(summary.minTempC)} / ${formatTemperatureC(summary.maxTempC)}`),
                         CardText(`💧 Regenwahrscheinlichkeit: ${summary.precipitationProbabilityPct ?? "n/a"} %`)
                     ]
                 })
@@ -115,4 +116,12 @@ const weatherCommand: CommandDefinition<"weather", WeatherParsedArgs> = {
     }
 }
 
-export const weather = new Command(weatherCommand)
+export const weather = createCommand(weatherCommand)
+
+export const weatherModule = defineCommandModule({
+    command: weather,
+    description: "Zeigt das Wetter oder speichert eine Standard-Location.",
+    aliases: ["wetter"] as const,
+    subcommands: ["set <location>", "tomorrow [location]"] as const,
+    actionIds: [] as const
+})

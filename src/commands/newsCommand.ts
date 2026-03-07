@@ -1,12 +1,14 @@
 import { Actions, Card, CardText, LinkButton } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
-import { getTodayNews } from "../lib/news.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { parseNoArgs } from "../lib/commandParsers.js"
+import { getTodayNews } from "../integrations/news.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { defineCommandModule } from "./shared/module.js"
 
 const newsCommand: CommandDefinition<"news", {}> = {
     name: "news",
     argPolicy: { type: "none" },
-    parseArgs: () => ({ ok: true, value: {} }),
+    parseArgs: parseNoArgs,
     execute: async (ctx) => {
         try {
             const summary = await getTodayNews()
@@ -37,4 +39,12 @@ const newsCommand: CommandDefinition<"news", {}> = {
     }
 }
 
-export const news = new Command(newsCommand)
+export const news = createCommand(newsCommand)
+
+export const newsModule = defineCommandModule({
+    command: news,
+    description: "Liest die aktuellen News-Feeds.",
+    aliases: [] as const,
+    subcommands: [] as const,
+    actionIds: [] as const
+})

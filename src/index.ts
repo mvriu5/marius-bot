@@ -4,11 +4,11 @@ import { registerOAuthRoutes } from "./routes/oauthRoute.js"
 import { registerQstashRoutes } from "./routes/qstashRoute.js"
 import { registerRootRoute } from "./routes/rootRoute.js"
 import { registerTelegramRoutes } from "./routes/telegramRoute.js"
-import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./lib/fitbit.js"
-import { createGoogleAuthorizationUrl, handleGoogleOAuthCallback } from "./lib/googleCalendar.js"
-import { createGithubAuthorizationUrl, handleGithubOAuthCallback } from "./lib/github.js"
-import { createNotionAuthorizationUrl, handleNotionOAuthCallback } from "./lib/notion.js"
-import { createNotionMcpAuthorizationUrl, handleNotionMcpOAuthCallback } from "./lib/notionMcp.js"
+import { createFitbitAuthorizationUrl, handleFitbitOAuthCallback } from "./integrations/fitbit.js"
+import { createGoogleAuthorizationUrl, handleGoogleOAuthCallback } from "./integrations/googleCalendar.js"
+import { createGithubAuthorizationUrl, handleGithubOAuthCallback } from "./integrations/github.js"
+import { createNotionAuthorizationUrl, handleNotionOAuthCallback } from "./integrations/notion.js"
+import { createNotionMcpAuthorizationUrl, handleNotionMcpOAuthCallback } from "./integrations/notionMcp.js"
 
 const app = new Hono()
 

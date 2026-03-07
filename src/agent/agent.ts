@@ -1,7 +1,7 @@
 import { openai } from "@ai-sdk/openai"
 import { type ModelMessage, stepCountIs, type ToolSet, ToolLoopAgent } from "ai"
 import { ProviderError } from "../errors/appError.js"
-import { getValidNotionMcpAccessTokenIfConnected } from "../lib/notionMcp.js"
+import { getValidNotionMcpAccessTokenIfConnected } from "../integrations/notionMcp.js"
 
 type AgentAnswer = {
     text: string

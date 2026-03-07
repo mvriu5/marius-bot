@@ -1,14 +1,22 @@
-import { Actions, Card, CardText, LinkButton } from "chat"
-import { ButtonGrid } from "../components/buttonGrid.js"
+import { Card, CardText } from "chat"
+import { ButtonGrid } from "../ui/buttonGrid.js"
 import { postThreadError } from "../errors/errorOutput.js"
 import {
     GoogleAuthorizationRequiredError,
     createCalendarEventForUser,
     createGoogleAuthorizationUrl,
     isGoogleCalendarConnected
-} from "../lib/googleCalendar.js"
+} from "../integrations/googleCalendar.js"
+import {
+    addHoursToLocalDateTimeStr,
+    formatLocalDateTime
+} from "../lib/dateTimeFormat.js"
+import { parseDateTimeTitleArgs } from "../lib/commandParsers.js"
 import { deleteStateValue, getStateValue, setStateValue } from "../oauth/oauthState.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { ACTION_IDS } from "./shared/actionIds.js"
+import { postOAuthLoginCard } from "../ui/oauthCards.js"
+import { defineCommandModule } from "./shared/module.js"
 
 const EVENT_TIMEZONE = "Europe/Berlin"
 const EVENT_STATE_TTL_MS = 60 * 60 * 1000
@@ -35,23 +43,6 @@ function createEventStateId() {
     return crypto.randomUUID().replace(/-/g, "").slice(0, 12)
 }
 
-function isTimeToken(value: string) {
-    return /^\d{2}:\d{2}$/.test(value)
-}
-
-function isDateToken(value: string) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(value)
-}
-
-function getCurrentDateStrInTimeZone(timeZone: string): string {
-    return new Intl.DateTimeFormat("sv-SE", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-    }).format(new Date())
-}
-
 function formatDurationLabel(hours: DurationOption): string {
     if (hours === 0.5) return "30 min"
     if (hours === 1) return "1 Std"
@@ -59,41 +50,6 @@ function formatDurationLabel(hours: DurationOption): string {
     if (hours === 2) return "2 Std"
     if (hours === 2.5) return "2,5 Std"
     return "3 Std"
-}
-
-function addHoursToLocalStr(localStr: string, hours: number): string {
-    // localStr must be in "YYYY-MM-DDTHH:MM:00" format
-    const [datePart, timePart] = localStr.split("T")
-    const [hourStr, minuteStr] = timePart.split(":")
-    const startMinutes = Number(hourStr) * 60 + Number(minuteStr)
-    const totalMinutes = startMinutes + Math.round(hours * 60)
-
-    const extraDays = Math.floor(totalMinutes / (24 * 60))
-    const remainingMinutes = totalMinutes % (24 * 60)
-    const endHour = Math.floor(remainingMinutes / 60)
-    const endMinute = remainingMinutes % 60
-
-    let finalDatePart = datePart
-    if (extraDays > 0) {
-        const [year, month, day] = datePart.split("-").map(Number)
-        const next = new Date(Date.UTC(year, month - 1, day + extraDays))
-        finalDatePart = [
-            next.getUTCFullYear(),
-            String(next.getUTCMonth() + 1).padStart(2, "0"),
-            String(next.getUTCDate()).padStart(2, "0")
-        ].join("-")
-    }
-
-    const hh = String(endHour).padStart(2, "0")
-    const mm = String(endMinute).padStart(2, "0")
-    return `${finalDatePart}T${hh}:${mm}:00`
-}
-
-function formatLocalStr(localStr: string): string {
-    const [datePart, timePart] = localStr.split("T")
-    const [year, month, day] = datePart.split("-")
-    const [hour, minute] = timePart.split(":")
-    return `${day}.${month}.${year} ${hour}:${minute}`
 }
 
 const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
@@ -109,41 +65,16 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
             return { ok: true, value: { mode: "confirm", stateId, durationHours } }
         }
 
-        if (args.length < 2) {
-            return {
-                ok: false,
-                message: "Nutzung: /event HH:MM <titel> oder /event YYYY-MM-DD HH:MM <titel>"
-            }
-        }
-
-        if (args.length >= 3 && isDateToken(args[0]) && isTimeToken(args[1])) {
-            const [dateStr, timeStr, ...titleParts] = args
-            const titel = titleParts.join(" ").trim()
-            if (!titel) {
-                return { ok: false, message: "Bitte gib einen Event-Titel an." }
-            }
-            return {
-                ok: true,
-                value: { mode: "picker", startLocalStr: `${dateStr}T${timeStr}:00`, titel }
-            }
-        }
-
-        if (isTimeToken(args[0])) {
-            const [timeStr, ...titleParts] = args
-            const titel = titleParts.join(" ").trim()
-            if (!titel) {
-                return { ok: false, message: "Bitte gib einen Event-Titel an." }
-            }
-            const dateStr = getCurrentDateStrInTimeZone(EVENT_TIMEZONE)
-            return {
-                ok: true,
-                value: { mode: "picker", startLocalStr: `${dateStr}T${timeStr}:00`, titel }
-            }
-        }
+        const parsedDateTime = parseDateTimeTitleArgs(args, { timeZone: EVENT_TIMEZONE })
+        if (!parsedDateTime.ok) return parsedDateTime
 
         return {
-            ok: false,
-            message: "Nutzung: /event HH:MM <titel> oder /event YYYY-MM-DD HH:MM <titel>"
+            ok: true,
+            value: {
+                mode: "picker",
+                startLocalStr: parsedDateTime.value.startLocalStr,
+                titel: parsedDateTime.value.title
+            }
         }
     },
     execute: async (ctx) => {
@@ -156,15 +87,11 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
             if (!connected) {
                 try {
                     const authorizationUrl = await createGoogleAuthorizationUrl(userId)
-                    await ctx.thread.post(
-                        Card({
-                            title: "Google Login",
-                            children: [
-                                CardText("Bitte verbinde zuerst Google Calendar:"),
-                                Actions([LinkButton({ url: authorizationUrl, label: "Login" })])
-                            ]
-                        })
-                    )
+                    await postOAuthLoginCard(ctx.thread, {
+                        title: "Google Login",
+                        text: "Bitte verbinde zuerst Google Calendar:",
+                        authorizationUrl
+                    })
                 } catch (error) {
                     await postThreadError(ctx.thread, error, "Google Login konnte nicht gestartet werden")
                 }
@@ -180,13 +107,13 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
 
             await ctx.thread.post(
                 Card({
-                    title: `📅 Event: ${titel}`,
-                    children: [
-                        CardText(`Startzeit: ${formatLocalStr(startLocalStr)}`),
-                        CardText("Wähle die Dauer:"),
+                        title: `📅 Event: ${titel}`,
+                        children: [
+                            CardText(`Startzeit: ${formatLocalDateTime(startLocalStr)}`),
+                            CardText("Wähle die Dauer:"),
                         ...ButtonGrid({
                             buttons: DURATION_OPTIONS.map((hours) => ({
-                                id: "c:event:confirm",
+                                id: ACTION_IDS.event.confirm,
                                 label: formatDurationLabel(hours),
                                 value: `${stateId} ${hours}`
                             }))
@@ -218,7 +145,7 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
         }
 
         try {
-            const endLocalStr = addHoursToLocalStr(pendingEvent.startLocalStr, durationHours)
+            const endLocalStr = addHoursToLocalDateTimeStr(pendingEvent.startLocalStr, durationHours)
 
             await deleteStateValue(eventStateKey(stateId))
 
@@ -235,22 +162,18 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
                     children: [
                         CardText(pendingEvent.titel),
                         CardText(
-                            `${formatLocalStr(pendingEvent.startLocalStr)} – ${formatLocalStr(endLocalStr)}`
+                            `${formatLocalDateTime(pendingEvent.startLocalStr)} – ${formatLocalDateTime(endLocalStr)}`
                         )
                     ]
                 })
             )
         } catch (error) {
             if (error instanceof GoogleAuthorizationRequiredError) {
-                await ctx.thread.post(
-                    Card({
-                        title: "Google Login",
-                        children: [
-                            CardText("Bitte verbinde Google Calendar erneut (neue Berechtigungen erforderlich):"),
-                            Actions([LinkButton({ url: error.authorizationUrl, label: "Login" })])
-                        ]
-                    })
-                )
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "Google Login",
+                    text: "Bitte verbinde Google Calendar erneut (neue Berechtigungen erforderlich):",
+                    authorizationUrl: error.authorizationUrl
+                })
                 return
             }
             await postThreadError(ctx.thread, error, "Event konnte nicht erstellt werden")
@@ -258,4 +181,12 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
     }
 }
 
-export const event = new Command(eventCommand)
+export const event = createCommand(eventCommand)
+
+export const eventModule = defineCommandModule({
+    command: event,
+    description: "Erstellt ein Google Calendar Event mit Dauer-Auswahl.",
+    aliases: ["ev"] as const,
+    subcommands: ["HH:MM <titel>", "YYYY-MM-DD HH:MM <titel>"] as const,
+    actionIds: [ACTION_IDS.event.confirm] as const
+})

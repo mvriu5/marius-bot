@@ -1,4 +1,4 @@
-import { Actions, Button, Card, CardLink, CardText, LinkButton } from "chat"
+import { Actions, Button, Card, CardLink, CardText } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
 import {
     GithubAuthorizationRequiredError,
@@ -7,8 +7,12 @@ import {
     getGithubAssignedPrs,
     getGithubDailyCommitStats,
     isGithubConnected
-} from "../lib/github.js"
-import { Command, type CommandDefinition } from "../types/command.js"
+} from "../integrations/github.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
+import { parseMenuActionArgs } from "../lib/commandArgs.js"
+import { ACTION_IDS } from "./shared/actionIds.js"
+import { postOAuthLoginCard } from "../ui/oauthCards.js"
+import { defineCommandModule } from "./shared/module.js"
 
 type GithubAction = "menu" | "login" | "commits" | "issues" | "prs"
 type GithubParsedArgs = {
@@ -18,14 +22,11 @@ type GithubParsedArgs = {
 const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
     name: "github",
     argPolicy: { type: "max", max: 1 },
-    parseArgs: (args) => {
-        const action = args[0]
-        if (!action) return { ok: true, value: { action: "menu" as const } }
-        if (action === "login" || action === "commits" || action === "issues" || action === "prs") {
-            return { ok: true, value: { action } }
-        }
-        return { ok: false, message: "Unbekannter GitHub-Subcommand" }
-    },
+    parseArgs: (args) => parseMenuActionArgs(args, {
+        defaultAction: "menu",
+        allowedActions: ["login", "commits", "issues", "prs"] as const,
+        unknownActionMessage: "Unbekannter GitHub-Subcommand"
+    }),
     execute: async (ctx) => {
         const { action } = ctx.parsedArgs
 
@@ -36,15 +37,11 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
             if (!connected) {
                 try {
                     const authorizationUrl = await createGithubAuthorizationUrl(userId)
-                    await ctx.thread.post(
-                        Card({
-                            title: "GitHub Login",
-                            children: [
-                                CardText("Bitte verbinde zuerst GitHub:"),
-                                Actions([LinkButton({ url: authorizationUrl, label: "Login" })])
-                            ]
-                        })
-                    )
+                    await postOAuthLoginCard(ctx.thread, {
+                        title: "GitHub Login",
+                        text: "Bitte verbinde zuerst GitHub:",
+                        authorizationUrl
+                    })
                 } catch (error) {
                     await postThreadError(ctx.thread, error, "GitHub Login konnte nicht gestartet werden")
                 }
@@ -57,9 +54,9 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
                     children: [
                         CardText("Wähle einen Subcommand:"),
                         Actions([
-                            Button({ id: "command:github:commits", label: "Commits", value: "github commits" }),
-                            Button({ id: "command:github:issues", label: "Issues", value: "github issues" }),
-                            Button({ id: "command:github:prs", label: "PRs", value: "github prs" })
+                            Button({ id: ACTION_IDS.github.commits, label: "Commits", value: "github commits" }),
+                            Button({ id: ACTION_IDS.github.issues, label: "Issues", value: "github issues" }),
+                            Button({ id: ACTION_IDS.github.prs, label: "PRs", value: "github prs" })
                         ])
                     ]
                 })
@@ -70,15 +67,11 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
         if (action === "login") {
             try {
                 const authorizationUrl = await createGithubAuthorizationUrl(ctx.message.author.userId)
-                await ctx.thread.post(
-                    Card({
-                        title: "GitHub Login",
-                        children: [
-                            CardText("Bitte verbinde GitHub hier:"),
-                            Actions([LinkButton({ url: authorizationUrl, label: "Login" })])
-                        ]
-                    })
-                )
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "GitHub Login",
+                    text: "Bitte verbinde GitHub hier:",
+                    authorizationUrl
+                })
             } catch (error) {
                 await postThreadError(ctx.thread, error, "GitHub Login konnte nicht gestartet werden")
             }
@@ -139,15 +132,11 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
             )
         } catch (error) {
             if (error instanceof GithubAuthorizationRequiredError) {
-                await ctx.thread.post(
-                    Card({
-                        title: "GitHub Login",
-                        children: [
-                            CardText("Bitte verbinde zuerst GitHub:"),
-                            Actions([LinkButton({ url: error.authorizationUrl, label: "Login" })])
-                        ]
-                    })
-                )
+                await postOAuthLoginCard(ctx.thread, {
+                    title: "GitHub Login",
+                    text: "Bitte verbinde zuerst GitHub:",
+                    authorizationUrl: error.authorizationUrl
+                })
                 return
             }
 
@@ -156,4 +145,17 @@ const githubCommand: CommandDefinition<"github", GithubParsedArgs> = {
     }
 }
 
-export const github = new Command(githubCommand)
+export const github = createCommand(githubCommand)
+
+export const githubModule = defineCommandModule({
+    command: github,
+    description: "Zeigt GitHub Commits, Issues und PRs.",
+    aliases: ["gh", "git"] as const,
+    subcommands: ["login", "commits", "issues", "prs"] as const,
+    actionIds: [
+        ACTION_IDS.github.login,
+        ACTION_IDS.github.commits,
+        ACTION_IDS.github.issues,
+        ACTION_IDS.github.prs
+    ] as const
+})

@@ -1,7 +1,9 @@
 import { type Message } from "chat"
-import { Command, type CommandDefinition } from "../types/command.js"
+import { parseNoArgs } from "../lib/commandParsers.js"
+import { createCommand, type CommandDefinition } from "../types/command.js"
 import { clearMessageHistory, getMessageIds } from "../lib/messageHistory.js"
 import { clearAgentSession } from "../agent/session.js"
+import { defineCommandModule } from "./shared/module.js"
 
 const CLEAR_LOOKBACK_LIMIT = Math.max(50, 1000)
 
@@ -21,7 +23,7 @@ function parseCompositeMessageId(value: string | undefined) {
 const clearCommand: CommandDefinition<"clear", {}> = {
     name: "clear",
     argPolicy: { type: "none" },
-    parseArgs: () => ({ ok: true, value: {} }),
+    parseArgs: parseNoArgs,
     execute: async (ctx) => {
         const knownById = new Map<string, Message>()
 
@@ -71,4 +73,12 @@ const clearCommand: CommandDefinition<"clear", {}> = {
     }
 }
 
-export const clear = new Command(clearCommand)
+export const clear = createCommand(clearCommand)
+
+export const clearModule = defineCommandModule({
+    command: clear,
+    description: "Loescht Bot-Nachrichten im aktuellen Thread.",
+    aliases: ["c"] as const,
+    subcommands: [] as const,
+    actionIds: [] as const
+})
