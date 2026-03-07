@@ -1,5 +1,7 @@
 import { Actions, Card, CardLink, CardText, LinkButton } from "chat"
 import { postThreadError } from "../errors/errorOutput.js"
+import { normalizeError } from "../errors/appError.js"
+import { logError } from "../errors/errorOutput.js"
 import { ButtonGrid } from "../components/buttonGrid.js"
 import {
     closePullRequest,
@@ -21,6 +23,7 @@ import {
     setCopilotTask,
     startCopilotTaskFromPending
 } from "../lib/copilotTasks.js"
+import { clearCopilotPinnedMessages, transitionCopilotPinnedMessage } from "../lib/copilotPins.js"
 import { Command, type CommandDefinition } from "../types/command.js"
 
 type CopilotAction = "start" | "repo" | "login" | "merge" | "reject" | "later"
@@ -91,6 +94,7 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
     execute: async (ctx) => {
         const parsed = ctx.parsedArgs
         const userId = ctx.message.author.userId
+        let activeTask: CopilotTask | undefined
 
         if (parsed.action === "login") {
             try {
@@ -194,6 +198,7 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                     pending,
                     repoFullName: selection.repoFullName
                 })
+                activeTask = task
 
                 await deleteCopilotPendingPrompt(selection.pendingId)
                 await deleteCopilotRepoSelection(selection.id)
@@ -210,10 +215,15 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                         ]
                     })
                 )
+                await transitionCopilotPinnedMessage({
+                    threadId: task.threadId,
+                    nextPinnedMessageId: startedCard.id
+                })
                 await setCopilotTask({
                     ...task,
                     repoSelectionMessageId: ctx.source === "action" ? ctx.actionMessageId : undefined,
-                    startedMessageId: startedCard.id
+                    startedMessageId: startedCard.id,
+                    finalPinnedMessageId: undefined
                 })
                 return
             }
@@ -223,8 +233,18 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                 await ctx.thread.post("Copilot-Task nicht gefunden.")
                 return
             }
+            activeTask = task
 
             if (parsed.action === "later") {
+                await clearCopilotPinnedMessages({
+                    threadId: task.threadId,
+                    processingMessageId: task.startedMessageId,
+                    currentPinnedMessageId: task.finalPinnedMessageId
+                })
+                await setCopilotTask({
+                    ...task,
+                    finalPinnedMessageId: undefined
+                })
                 await ctx.thread.post("Okay, ich lasse den PR unverändert.")
                 return
             }
@@ -237,13 +257,19 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
             if (parsed.action === "merge") {
                 await mergePullRequest(userId, task.repoFullName, task.prNumber)
                 const actionMessageId = ctx.source === "action" ? ctx.actionMessageId : undefined
+                await clearCopilotPinnedMessages({
+                    threadId: task.threadId,
+                    processingMessageId: task.startedMessageId,
+                    currentPinnedMessageId: task.finalPinnedMessageId
+                })
                 await deleteTrackedPrCards(task, actionMessageId)
                 await setCopilotTask({
                     ...task,
                     status: "merged",
                     prCardMessageIds: [],
                     repoSelectionMessageId: undefined,
-                    startedMessageId: undefined
+                    startedMessageId: undefined,
+                    finalPinnedMessageId: undefined
                 })
                 await ctx.thread.post(
                     Card({
@@ -260,13 +286,19 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
 
             await closePullRequest(userId, task.repoFullName, task.prNumber)
             const actionMessageId = ctx.source === "action" ? ctx.actionMessageId : undefined
+            await clearCopilotPinnedMessages({
+                threadId: task.threadId,
+                processingMessageId: task.startedMessageId,
+                currentPinnedMessageId: task.finalPinnedMessageId
+            })
             await deleteTrackedPrCards(task, actionMessageId)
             await setCopilotTask({
                 ...task,
                 status: "rejected",
                 prCardMessageIds: [],
                 repoSelectionMessageId: undefined,
-                startedMessageId: undefined
+                startedMessageId: undefined,
+                finalPinnedMessageId: undefined
             })
             await ctx.thread.post(
                 Card({
@@ -293,7 +325,22 @@ const copilotCommand: CommandDefinition<"copilot", CopilotParsedArgs> = {
                 return
             }
 
-            await postThreadError(ctx.thread, error, "/copilot fehlgeschlagen")
+            const normalized = normalizeError(error)
+            logError("/copilot fehlgeschlagen", error)
+            const errorMessage = await ctx.thread.post(`⚠️ /copilot fehlgeschlagen: ${normalized.userMessage}`)
+
+            if (activeTask) {
+                await transitionCopilotPinnedMessage({
+                    threadId: activeTask.threadId,
+                    processingMessageId: activeTask.startedMessageId,
+                    currentPinnedMessageId: activeTask.finalPinnedMessageId,
+                    nextPinnedMessageId: errorMessage.id
+                })
+                await setCopilotTask({
+                    ...activeTask,
+                    finalPinnedMessageId: errorMessage.id
+                })
+            }
         }
     }
 }

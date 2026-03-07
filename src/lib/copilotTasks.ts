@@ -7,6 +7,7 @@ import {
     createCopilotIssueTask,
     findCopilotPrForIssue
 } from "./github.js"
+import { transitionCopilotPinnedMessage } from "./copilotPins.js"
 
 const COPILOT_PENDING_KEY = "copilot:pending:"
 const COPILOT_TASK_KEY = "copilot:task:"
@@ -46,6 +47,7 @@ export type CopilotTask = {
     prCardMessageIds?: string[]
     repoSelectionMessageId?: string
     startedMessageId?: string
+    finalPinnedMessageId?: string
     lastPrHeadSha?: string
     stablePolls?: number
 }
@@ -262,17 +264,9 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
         if (stablePolls < COPILOT_REQUIRED_STABLE_POLLS) {
             const attempts = task.attempts + 1
             if (attempts >= COPILOT_MAX_ATTEMPTS) {
-                await setCopilotTask({
-                    ...task,
-                    attempts,
-                    status: "timeout",
-                    lastPrHeadSha: pr.headSha,
-                    stablePolls
-                })
-
                 const { bot } = await import("../server/bot.js")
                 const adapter = bot.getAdapter("telegram")
-                await adapter.postMessage(task.threadId,
+                const timeoutCard = await adapter.postMessage(task.threadId,
                     Card({
                         title: "Copilot hat den PR noch nicht finalisiert.",
                         children: [
@@ -282,6 +276,20 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
                         ]
                     })
                 )
+                await transitionCopilotPinnedMessage({
+                    threadId: task.threadId,
+                    processingMessageId: task.startedMessageId,
+                    currentPinnedMessageId: task.finalPinnedMessageId,
+                    nextPinnedMessageId: timeoutCard.id
+                })
+                await setCopilotTask({
+                    ...task,
+                    attempts,
+                    status: "timeout",
+                    lastPrHeadSha: pr.headSha,
+                    stablePolls,
+                    finalPinnedMessageId: timeoutCard.id
+                })
                 return
             }
 
@@ -328,22 +336,22 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
                 ]
             }) as never
         )
+        await transitionCopilotPinnedMessage({
+            threadId: task.threadId,
+            processingMessageId: task.startedMessageId,
+            currentPinnedMessageId: task.finalPinnedMessageId,
+            nextPinnedMessageId: postedCard.id
+        })
         const prCardMessageIds = Array.from(new Set([...(next.prCardMessageIds ?? []), postedCard.id]))
-        await setCopilotTask({ ...next, prCardMessageIds })
+        await setCopilotTask({ ...next, prCardMessageIds, finalPinnedMessageId: postedCard.id })
         return
     }
 
     const attempts = task.attempts + 1
     if (attempts >= COPILOT_MAX_ATTEMPTS) {
-        await setCopilotTask({
-            ...task,
-            attempts,
-            status: "timeout"
-        })
-
         const { bot } = await import("../server/bot.js")
         const adapter = bot.getAdapter("telegram")
-        await adapter.postMessage(task.threadId,
+        const timeoutCard = await adapter.postMessage(task.threadId,
             Card({
                 title: "Copilot hat noch keinen PR erstellt.",
                 children: [
@@ -353,6 +361,18 @@ export async function processCopilotPoll(payload: CopilotPollPayload) {
                 ]
             })
         )
+        await transitionCopilotPinnedMessage({
+            threadId: task.threadId,
+            processingMessageId: task.startedMessageId,
+            currentPinnedMessageId: task.finalPinnedMessageId,
+            nextPinnedMessageId: timeoutCard.id
+        })
+        await setCopilotTask({
+            ...task,
+            attempts,
+            status: "timeout",
+            finalPinnedMessageId: timeoutCard.id
+        })
         return
     }
 
