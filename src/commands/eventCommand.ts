@@ -30,6 +30,11 @@ function eventStateKey(stateId: string) {
     return `event:pending:${stateId}`
 }
 
+function createEventStateId() {
+    // Keep callback payloads small enough for Telegram callback_data (64 bytes max).
+    return crypto.randomUUID().replace(/-/g, "").slice(0, 12)
+}
+
 function isTimeToken(value: string) {
     return /^\d{2}:\d{2}$/.test(value)
 }
@@ -166,7 +171,7 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
                 return
             }
 
-            const stateId = crypto.randomUUID()
+            const stateId = createEventStateId()
             await setStateValue<PendingEventState>(
                 eventStateKey(stateId),
                 { startLocalStr, titel, telegramUserId: userId },
@@ -181,9 +186,9 @@ const eventCommand: CommandDefinition<"event", EventParsedArgs> = {
                         CardText("Wähle die Dauer:"),
                         ...ButtonGrid({
                             buttons: DURATION_OPTIONS.map((hours) => ({
-                                id: "command:event:confirm",
+                                id: "c:event:confirm",
                                 label: formatDurationLabel(hours),
-                                value: `event confirm ${stateId} ${hours}`
+                                value: `${stateId} ${hours}`
                             }))
                         })
                     ]
