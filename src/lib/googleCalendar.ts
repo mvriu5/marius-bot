@@ -32,6 +32,13 @@ type GoogleCalendarEventsResponse = {
     }>
 }
 
+type GoogleCalendarEventInput = {
+    summary: string
+    startLocalStr: string
+    endLocalStr: string
+    timeZone: string
+}
+
 type GoogleCalendarEvent = NonNullable<GoogleCalendarEventsResponse["items"]>[number]
 
 const keys = createTelegramOAuthKeys("google")
@@ -92,7 +99,7 @@ export async function createGoogleAuthorizationUrl(telegramUserId: string) {
     )
 
     const url = google.createAuthorizationURL(stateId, codeVerifier, [
-        "https://www.googleapis.com/auth/calendar.readonly"
+        "https://www.googleapis.com/auth/calendar.events"
     ])
     url.searchParams.set("access_type", "offline")
     url.searchParams.set("prompt", "consent")
@@ -295,4 +302,51 @@ export async function getTodayCalendarEventsSummary(telegramUserId: string) {
     ]
 
     return lines.join("\n")
+}
+
+export async function createCalendarEventForUser(
+    telegramUserId: string,
+    eventInput: GoogleCalendarEventInput
+) {
+    const accessToken = await getValidAccessTokenForUser(telegramUserId)
+
+    const body = JSON.stringify({
+        summary: eventInput.summary,
+        start: {
+            dateTime: eventInput.startLocalStr,
+            timeZone: eventInput.timeZone
+        },
+        end: {
+            dateTime: eventInput.endLocalStr,
+            timeZone: eventInput.timeZone
+        }
+    })
+
+    const response = await fetch(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+            },
+            body
+        }
+    )
+
+    if (response.status === 401 || response.status === 403) {
+        const url = await createGoogleAuthorizationUrl(telegramUserId)
+        throw new GoogleAuthorizationRequiredError(url)
+    }
+
+    if (!response.ok) {
+        const details = await response.text()
+        throw new ProviderError(
+            "google",
+            "GOOGLE_CALENDAR_CREATE_EVENT_ERROR",
+            "Google Calendar Event konnte nicht erstellt werden.",
+            502,
+            `Google Calendar API error (${response.status}): ${details}`
+        )
+    }
 }
