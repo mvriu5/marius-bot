@@ -3,6 +3,7 @@ import { account } from "../commands/accountCommand.js"
 import { agent } from "../commands/agentCommand.js"
 import { clear } from "../commands/clearCommand.js"
 import { copilot } from "../commands/copilotCommand.js"
+import { event } from "../commands/eventCommand.js"
 import { fitbit } from "../commands/fitbitCommand.js"
 import { github } from "../commands/githubCommand.js"
 import { help } from "../commands/helpCommand.js"
@@ -69,6 +70,13 @@ export const COMMAND_ENTRIES = [
         aliases: ["meeting", "calendar", "schedule"] as const,
         subcommands: ["login", "summary"] as const,
         actionIds: ["command:meetings:login", "command:meetings:summary"] as const
+    },
+    {
+        command: event,
+        description: "Erstellt ein Google Calendar Event mit Dauer-Auswahl.",
+        aliases: ["ev"] as const,
+        subcommands: ["HH:MM <titel>", "YYYY-MM-DD HH:MM <titel>"] as const,
+        actionIds: ["command:event:confirm"] as const
     },
     {
         command: account,
