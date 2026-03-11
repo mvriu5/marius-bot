@@ -100,7 +100,7 @@ export async function executeCopilot(ctx: CopilotCommandContext) {
                 prompt: parsed.prompt
             })
 
-            const repos = await listGithubWritableRepositories(userId, 8)
+            const repos = await listGithubWritableRepositories(userId)
             if (repos.length === 0) {
                 await ctx.thread.post("Keine beschreibbaren Repositories gefunden.")
                 return
@@ -117,7 +117,7 @@ export async function executeCopilot(ctx: CopilotCommandContext) {
 
                     return {
                         id: ACTION_IDS.copilot.repo,
-                        label: repo.fullName,
+                        label: repo.name,
                         value: selection.id
                     }
                 })

@@ -10,7 +10,7 @@ export function createRepoSelectionCard(prompt: string, buttons: Array<{ id: str
             CardText("Wähle ein Repository:"),
             ...ButtonGrid({
                 buttons,
-                columns: 1
+                columns: 2
             })
         ]
     })

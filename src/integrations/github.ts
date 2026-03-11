@@ -318,26 +318,43 @@ export async function getGithubAssignedPrs(
 
 export async function listGithubWritableRepositories(
     telegramUserId: string,
-    limit = 8
-): Promise<Array<{ fullName: string; defaultBranch: string }>> {
+    limit = 100
+): Promise<Array<{ fullName: string; name: string; defaultBranch: string }>> {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
     const octokit = getOctokit(accessToken)
-    const perPage = Math.max(1, Math.min(50, limit * 3))
+    const perPage = 100
+    const cappedLimit = Math.max(1, Math.min(200, limit))
+    const writableRepos: Array<{ fullName: string; name: string; defaultBranch: string }> = []
+    let page = 1
 
-    const { data: repos } = await octokit.rest.repos.listForAuthenticatedUser({
-        sort: "updated",
-        direction: "desc",
-        affiliation: "owner,collaborator,organization_member",
-        per_page: perPage
-    })
+    while (writableRepos.length < cappedLimit) {
+        const { data: repos } = await octokit.rest.repos.listForAuthenticatedUser({
+            sort: "updated",
+            direction: "desc",
+            affiliation: "owner,collaborator,organization_member",
+            per_page: perPage,
+            page
+        })
 
-    return repos
-        .filter((repo) => repo.permissions?.push && repo.full_name)
-        .slice(0, limit)
-        .map((repo) => ({
-            fullName: repo.full_name as string,
-            defaultBranch: repo.default_branch || "main"
-        }))
+        if (repos.length === 0) break
+
+        for (const repo of repos) {
+            if (!repo.permissions?.push || !repo.full_name || !repo.name) continue
+
+            writableRepos.push({
+                fullName: repo.full_name,
+                name: repo.name,
+                defaultBranch: repo.default_branch || "main"
+            })
+
+            if (writableRepos.length >= cappedLimit) break
+        }
+
+        if (repos.length < perPage) break
+        page += 1
+    }
+
+    return writableRepos
 }
 
 export async function createCopilotIssueTask(

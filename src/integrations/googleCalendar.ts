@@ -19,6 +19,7 @@ import {
 
 type GoogleCalendarEventsResponse = {
     items?: Array<{
+        id?: string
         summary?: string
         location?: string
         start?: {
@@ -32,6 +33,15 @@ type GoogleCalendarEventsResponse = {
     }>
 }
 
+type GoogleCalendarListResponse = {
+    items?: Array<{
+        id?: string
+        summary?: string
+        selected?: boolean
+        accessRole?: string
+    }>
+}
+
 type GoogleCalendarEventInput = {
     summary: string
     startLocalStr: string
@@ -40,6 +50,9 @@ type GoogleCalendarEventInput = {
 }
 
 type GoogleCalendarEvent = NonNullable<GoogleCalendarEventsResponse["items"]>[number]
+type GoogleCalendarEventWithSource = GoogleCalendarEvent & {
+    calendarName: string
+}
 
 const keys = createTelegramOAuthKeys("google")
 
@@ -99,7 +112,7 @@ export async function createGoogleAuthorizationUrl(telegramUserId: string) {
     )
 
     const url = google.createAuthorizationURL(stateId, codeVerifier, [
-        "https://www.googleapis.com/auth/calendar.events"
+        "https://www.googleapis.com/auth/calendar"
     ])
     url.searchParams.set("access_type", "offline")
     url.searchParams.set("prompt", "consent")
@@ -235,7 +248,38 @@ function formatEventTime(event: GoogleCalendarEvent) {
     return `${start}-${end}`
 }
 
-async function fetchTodayEvents(accessToken: string) {
+async function fetchCalendarList(accessToken: string) {
+    const response = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+        headers: {
+            Authorization: `Bearer ${accessToken}`
+        }
+    })
+
+    if (response.status === 401 || response.status === 403) {
+        throw new ProviderError(
+            "google",
+            "GOOGLE_CALENDAR_REAUTH_REQUIRED",
+            "Google Calendar muss erneut verbunden werden.",
+            403,
+            "Google calendar list request returned unauthorized"
+        )
+    }
+
+    if (!response.ok) {
+        const details = await response.text()
+        throw new ProviderError(
+            "google",
+            "GOOGLE_CALENDAR_API_ERROR",
+            "Google Calendar Daten konnten nicht geladen werden.",
+            502,
+            `Google Calendar list API error (${response.status}): ${details}`
+        )
+    }
+
+    return (await response.json()) as GoogleCalendarListResponse
+}
+
+async function fetchTodayEventsForCalendar(accessToken: string, calendarId: string) {
     const { timeMin, timeMax } = getTodayWindow()
     const params = new URLSearchParams({
         timeMin,
@@ -246,11 +290,24 @@ async function fetchTodayEvents(accessToken: string) {
         timeZone: "Europe/Berlin"
     })
 
-    const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
-        headers: {
-            Authorization: `Bearer ${accessToken}`
+    const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+        {
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            }
         }
-    })
+    )
+
+    if (response.status === 401 || response.status === 403) {
+        throw new ProviderError(
+            "google",
+            "GOOGLE_CALENDAR_REAUTH_REQUIRED",
+            "Google Calendar muss erneut verbunden werden.",
+            403,
+            `Google calendar event request for ${calendarId} returned unauthorized`
+        )
+    }
 
     if (!response.ok) {
         const details = await response.text()
@@ -283,9 +340,43 @@ function isUpcomingOrOngoingEvent(event: GoogleCalendarEvent, now: Date) {
 
 export async function getTodayCalendarEventsSummary(telegramUserId: string) {
     const accessToken = await getValidAccessTokenForUser(telegramUserId)
-    const eventsResponse = await fetchTodayEvents(accessToken)
-    const now = new Date()
-    const events = (eventsResponse.items ?? []).filter((event) => isUpcomingOrOngoingEvent(event, now))
+    let events: GoogleCalendarEventWithSource[]
+
+    try {
+        const now = new Date()
+        const calendarList = await fetchCalendarList(accessToken)
+        const calendars = (calendarList.items ?? []).filter((calendar) =>
+            Boolean(calendar.id) &&
+            calendar.accessRole !== "freeBusyReader" &&
+            calendar.selected !== false
+        )
+
+        events = (
+            await Promise.all(
+                calendars.map(async (calendar) => {
+                    const eventsResponse = await fetchTodayEventsForCalendar(accessToken, calendar.id!)
+                    return (eventsResponse.items ?? []).map((event) => ({
+                        ...event,
+                        calendarName: calendar.summary || "Unbekannter Kalender"
+                    }))
+                })
+            )
+        )
+            .flat()
+            .filter((event): event is GoogleCalendarEventWithSource => isUpcomingOrOngoingEvent(event, now))
+            .sort((a, b) => {
+                const aStart = toEventDate(a.start?.dateTime ?? a.start?.date)?.getTime() ?? Number.MAX_SAFE_INTEGER
+                const bStart = toEventDate(b.start?.dateTime ?? b.start?.date)?.getTime() ?? Number.MAX_SAFE_INTEGER
+                return aStart - bStart
+            })
+            .slice(0, 15)
+    } catch (error) {
+        if (error instanceof ProviderError && error.code === "GOOGLE_CALENDAR_REAUTH_REQUIRED") {
+            const url = await createGoogleAuthorizationUrl(telegramUserId)
+            throw new GoogleAuthorizationRequiredError(url)
+        }
+        throw error
+    }
 
     if (events.length === 0) {
         return "Heute stehen keine anstehenden Termine mehr im Google Calendar."
@@ -297,7 +388,7 @@ export async function getTodayCalendarEventsSummary(telegramUserId: string) {
             const title = event.summary || "Ohne Titel"
             const time = formatEventTime(event)
             const location = event.location ? ` (${event.location})` : ""
-            return `- ${time} ${title}${location}`
+            return `- ${time} ${title}${location} [${event.calendarName}]`
         })
     ]
 
